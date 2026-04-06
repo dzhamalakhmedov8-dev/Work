@@ -93,6 +93,23 @@
 - Verified public production endpoints:
   - `GET https://nutrition-planner-mobile.vercel.app/api/health` returns `200`
   - `POST https://nutrition-planner-mobile.vercel.app/api/v1/plan/generate` returns `200` for a valid profile payload
+- Redesigned the mobile UI layer for a more app-like mobile experience:
+  - refreshed theme tokens, spacing, radii, and card shadows
+  - rebuilt shared UI components with stronger hierarchy and touch-friendly controls
+  - introduced richer hero panels, choice chips, and improved metric cards
+- Updated key mobile screens to match the new design system:
+  - onboarding
+  - week overview
+  - profile
+  - shopping
+  - day detail
+  - meal detail
+  - replan modal
+  - settings
+- Updated the bottom tab bar to a more mobile-native floating style and hid duplicate tab headers.
+- Verified after the redesign:
+  - `npm run typecheck`
+  - `npm run vercel-build`
 
 ## Next Update Rule
 

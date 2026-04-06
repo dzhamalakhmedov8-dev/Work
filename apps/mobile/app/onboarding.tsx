@@ -1,13 +1,6 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type {
   ActivityLevel,
@@ -17,9 +10,19 @@ import type {
   UserProfile,
 } from '@nutrition-planner/shared';
 
-import { AppTextInput, FieldLabel, InfoBanner, Pill, PrimaryButton, ScreenCard, SectionTitle } from '../components/ui';
+import {
+  AppTextInput,
+  ChoiceChip,
+  FieldLabel,
+  HeroPanel,
+  InfoBanner,
+  Pill,
+  PrimaryButton,
+  ScreenCard,
+  SectionTitle,
+} from '../components/ui';
 import { useAppStore } from '../lib/app-store';
-import { colors, radii, spacing } from '../theme';
+import { colors, spacing } from '../theme';
 
 const parseList = (value: string): string[] =>
   value
@@ -126,44 +129,51 @@ export default function OnboardingScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <Pill label="Nutrition Planner MVP" tone="accent" />
-          <Text style={styles.title}>Build a weekly menu from real constraints, not guesswork.</Text>
-          <Text style={styles.subtitle}>
-            We use your profile, goal, activity, exclusions, and preferred food style to assemble a seven-day plan plus shopping list.
-          </Text>
-        </View>
+        <HeroPanel
+          eyebrow="Mobile meal planning"
+          title="Build a realistic week around your body, appetite, and non-negotiables."
+          subtitle="You answer a few fast questions once. The app turns them into a seven-day menu, exact ingredient grams, and a shopping list you can actually use."
+          tone="warm"
+        >
+          <View style={styles.heroPills}>
+            <Pill label="7-day plan" tone="ink" />
+            <Pill label="Recipes in grams" tone="ink" />
+            <Pill label="Auto shopping list" tone="ink" />
+          </View>
+        </HeroPanel>
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
         <ScreenCard>
           <SectionTitle
-            title="Physical profile"
-            subtitle="These numbers drive calories, macro floors, and meal sizing."
+            eyebrow="Step 1"
+            title="Body profile"
+            subtitle="These numbers power calories, protein floors, and portion sizing."
           />
+
           <FieldLabel label="Name (optional)" />
           <AppTextInput value={name} onChangeText={setName} placeholder="Alex" />
 
-          <View style={styles.row}>
-            <View style={styles.column}>
+          <View style={styles.inputRow}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Age" />
               <AppTextInput value={age} onChangeText={setAge} keyboardType="number-pad" />
             </View>
-            <View style={styles.column}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Sex for BMR" />
-              <ChoiceRow
-                value={sex}
-                options={[
-                  { label: 'Male', value: 'male' },
-                  { label: 'Female', value: 'female' },
-                ]}
-                onChange={(value) => setSex(value as Sex)}
-              />
+              <ChoiceWrap>
+                <ChoiceChip label="Male" active={sex === 'male'} onPress={() => setSex('male')} />
+                <ChoiceChip
+                  label="Female"
+                  active={sex === 'female'}
+                  onPress={() => setSex('female')}
+                />
+              </ChoiceWrap>
             </View>
           </View>
 
-          <View style={styles.row}>
-            <View style={styles.column}>
+          <View style={styles.inputRow}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Height (cm)" />
               <AppTextInput
                 value={heightCm}
@@ -171,7 +181,7 @@ export default function OnboardingScreen() {
                 keyboardType="decimal-pad"
               />
             </View>
-            <View style={styles.column}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Weight (kg)" />
               <AppTextInput
                 value={weightKg}
@@ -181,8 +191,8 @@ export default function OnboardingScreen() {
             </View>
           </View>
 
-          <View style={styles.row}>
-            <View style={styles.column}>
+          <View style={styles.inputRow}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Resting heart rate" />
               <AppTextInput
                 value={restingHeartRate}
@@ -191,7 +201,7 @@ export default function OnboardingScreen() {
                 placeholder="Optional"
               />
             </View>
-            <View style={styles.column}>
+            <View style={styles.inputColumn}>
               <FieldLabel label="Target weight" />
               <AppTextInput
                 value={targetWeightKg}
@@ -203,62 +213,92 @@ export default function OnboardingScreen() {
           </View>
         </ScreenCard>
 
-        <ScreenCard>
+        <ScreenCard tone="muted">
           <SectionTitle
+            eyebrow="Step 2"
             title="Planning rules"
-            subtitle="This shapes the weekly calorie target, meal count, and style of recipes."
+            subtitle="This is where the week becomes personal instead of generic."
           />
 
           <FieldLabel label="Goal" />
-          <ChoiceRow
-            value={goal}
-            options={[
-              { label: 'Lose', value: 'lose' },
-              { label: 'Maintain', value: 'maintain' },
-              { label: 'Gain', value: 'gain' },
-            ]}
-            onChange={(value) => setGoal(value as Goal)}
-          />
+          <ChoiceWrap>
+            <ChoiceChip label="Lose" active={goal === 'lose'} onPress={() => setGoal('lose')} />
+            <ChoiceChip
+              label="Maintain"
+              active={goal === 'maintain'}
+              onPress={() => setGoal('maintain')}
+            />
+            <ChoiceChip label="Gain" active={goal === 'gain'} onPress={() => setGoal('gain')} />
+          </ChoiceWrap>
 
           <FieldLabel label="Activity level" />
-          <ChoiceRow
-            value={activityLevel}
-            options={[
-              { label: 'Sedentary', value: 'sedentary' },
-              { label: 'Light', value: 'light' },
-              { label: 'Moderate', value: 'moderate' },
-              { label: 'Very', value: 'very' },
-              { label: 'Athlete', value: 'athlete' },
-            ]}
-            onChange={(value) => setActivityLevel(value as ActivityLevel)}
-          />
+          <ChoiceWrap>
+            <ChoiceChip
+              label="Sedentary"
+              active={activityLevel === 'sedentary'}
+              onPress={() => setActivityLevel('sedentary')}
+            />
+            <ChoiceChip
+              label="Light"
+              active={activityLevel === 'light'}
+              onPress={() => setActivityLevel('light')}
+            />
+            <ChoiceChip
+              label="Moderate"
+              active={activityLevel === 'moderate'}
+              onPress={() => setActivityLevel('moderate')}
+            />
+            <ChoiceChip
+              label="Very active"
+              active={activityLevel === 'very'}
+              onPress={() => setActivityLevel('very')}
+            />
+            <ChoiceChip
+              label="Athlete"
+              active={activityLevel === 'athlete'}
+              onPress={() => setActivityLevel('athlete')}
+            />
+          </ChoiceWrap>
 
-          <FieldLabel label="Meals per day" />
-          <ChoiceRow
-            value={String(mealsPerDay)}
-            options={[
-              { label: '3 meals', value: '3' },
-              { label: '4 meals', value: '4' },
-            ]}
-            onChange={(value) => setMealsPerDay(value === '3' ? 3 : 4)}
-          />
+          <FieldLabel label="Eating moments per day" />
+          <ChoiceWrap>
+            <ChoiceChip
+              label="3 meals"
+              active={mealsPerDay === 3}
+              onPress={() => setMealsPerDay(3)}
+            />
+            <ChoiceChip
+              label="4 meals"
+              active={mealsPerDay === 4}
+              onPress={() => setMealsPerDay(4)}
+            />
+          </ChoiceWrap>
 
-          <FieldLabel label="Cooking time preference" />
-          <ChoiceRow
-            value={cookingTimePreference}
-            options={[
-              { label: 'Quick', value: 'quick' },
-              { label: 'Balanced', value: 'balanced' },
-              { label: 'Flexible', value: 'flexible' },
-            ]}
-            onChange={(value) => setCookingTimePreference(value as CookingTimePreference)}
-          />
+          <FieldLabel label="Cooking rhythm" />
+          <ChoiceWrap>
+            <ChoiceChip
+              label="Quick"
+              active={cookingTimePreference === 'quick'}
+              onPress={() => setCookingTimePreference('quick')}
+            />
+            <ChoiceChip
+              label="Balanced"
+              active={cookingTimePreference === 'balanced'}
+              onPress={() => setCookingTimePreference('balanced')}
+            />
+            <ChoiceChip
+              label="Flexible"
+              active={cookingTimePreference === 'flexible'}
+              onPress={() => setCookingTimePreference('flexible')}
+            />
+          </ChoiceWrap>
         </ScreenCard>
 
         <ScreenCard>
           <SectionTitle
+            eyebrow="Step 3"
             title="Constraints and taste"
-            subtitle="Use comma-separated lists. Allergies, forbidden foods, and dislikes are treated as hard constraints."
+            subtitle="Comma-separated lists are enough. Allergies, forbidden foods, and dislikes are treated as hard rules."
           />
 
           <FieldLabel label="Allergies" />
@@ -286,48 +326,31 @@ export default function OnboardingScreen() {
           <AppTextInput
             value={preferredCuisines}
             onChangeText={setPreferredCuisines}
-            placeholder="Mediterranean, high-protein, warm bowls"
+            placeholder="Mediterranean, warm bowls, high-protein"
           />
         </ScreenCard>
 
-        <PrimaryButton
-          label={busy ? 'Building your week...' : 'Create profile and generate week'}
-          onPress={submit}
-          disabled={busy}
-        />
+        <ScreenCard tone="accent" style={styles.ctaCard}>
+          <View style={styles.ctaCopy}>
+            <Text style={styles.ctaTitle}>Ready to generate your first week?</Text>
+            <Text style={styles.ctaText}>
+              We&apos;ll build {mealsPerDay} eating moments per day around your {goal} goal and keep the hard food rules intact.
+            </Text>
+          </View>
+          <PrimaryButton
+            label={busy ? 'Building your week...' : 'Create profile and generate week'}
+            onPress={submit}
+            disabled={busy}
+            tone="warm"
+          />
+        </ScreenCard>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function ChoiceRow({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: Array<{ label: string; value: string }>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View style={styles.choiceRow}>
-      {options.map((option) => {
-        const active = option.value === value;
-
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={[styles.choice, active ? styles.choiceActive : null]}
-          >
-            <Text style={[styles.choiceText, active ? styles.choiceTextActive : null]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+function ChoiceWrap({ children }: { children: React.ReactNode }) {
+  return <View style={styles.choiceWrap}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -338,58 +361,41 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl + 24,
   },
-  hero: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.lg,
-  },
-  title: {
-    color: colors.ink,
-    fontFamily: 'Georgia',
-    fontSize: 31,
-    lineHeight: 37,
-  },
-  subtitle: {
-    color: colors.inkMuted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  column: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  choiceRow: {
+  heroPills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  choice: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  inputRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
-  choiceActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
+  inputColumn: {
+    flex: 1,
+    gap: spacing.sm,
   },
-  choiceText: {
-    color: colors.ink,
+  choiceWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  ctaCard: {
+    gap: spacing.md,
+  },
+  ctaCopy: {
+    gap: 6,
+  },
+  ctaTitle: {
+    color: colors.accentDeep,
+    fontFamily: 'Georgia',
+    fontSize: 24,
+    lineHeight: 29,
+  },
+  ctaText: {
+    color: colors.inkSoft,
     fontSize: 14,
-    fontWeight: '600',
-  },
-  choiceTextActive: {
-    color: colors.accentStrong,
+    lineHeight: 21,
   },
 });

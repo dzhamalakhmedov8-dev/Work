@@ -2,9 +2,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, InfoBanner, Pill, PrimaryButton, ScreenCard, SectionTitle } from '../../components/ui';
+import {
+  EmptyState,
+  HeroPanel,
+  InfoBanner,
+  Pill,
+  PrimaryButton,
+  ScreenCard,
+} from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
-import { formatNutritionLine } from '../../lib/format';
+import { formatMealSlot, formatNutritionLine } from '../../lib/format';
 import { colors, radii, spacing } from '../../theme';
 
 export default function DayDetailScreen() {
@@ -19,7 +26,7 @@ export default function DayDetailScreen() {
         <View style={styles.emptyWrap}>
           <EmptyState
             title="Day not found"
-            description="Go back to the week tab and pick a generated day from the current plan."
+            description="Go back to the week tab and open one of the generated day cards from your active plan."
           />
         </View>
       </SafeAreaView>
@@ -29,20 +36,26 @@ export default function DayDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <SectionTitle title={day.label} subtitle={formatNutritionLine(day.totals)} />
-        {error ? <InfoBanner message={error} tone="danger" /> : null}
-
-        <ScreenCard>
-          <Pill label={`${day.meals.length} meals`} tone="accent" />
-          <Text style={styles.cardTitle}>Daily plan</Text>
-          <Text style={styles.cardBody}>
-            Open any meal for ingredients, exact grams, and a one-tap swap flow.
-          </Text>
+        <HeroPanel
+          eyebrow="Day plan"
+          title={day.label}
+          subtitle={formatNutritionLine(day.totals)}
+          tone="accent"
+        >
+          <View style={styles.heroMeta}>
+            <Pill label={`${day.meals.length} meals`} tone="ink" />
+            <Pill
+              label={`${Math.round(day.totals.calories / day.meals.length)} avg kcal/meal`}
+              tone="ink"
+            />
+          </View>
           <PrimaryButton
             label="Regenerate this day"
             onPress={() => router.push(`/modal?scope=day&dayIndex=${day.dayIndex}`)}
           />
-        </ScreenCard>
+        </HeroPanel>
+
+        {error ? <InfoBanner message={error} tone="danger" /> : null}
 
         {day.meals.map((meal) => (
           <Pressable
@@ -56,15 +69,23 @@ export default function DayDetailScreen() {
                 },
               })
             }
+            style={({ pressed }) => [pressed ? styles.cardPressed : null]}
           >
             <ScreenCard style={styles.mealCard}>
               <View style={styles.mealHeader}>
-                <Text style={styles.mealSlot}>{meal.slotType.toUpperCase()}</Text>
-                <Pill label={`${Math.round(meal.recipe.nutrition.calories)} kcal`} tone="warm" />
+                <View style={styles.mealHeaderCopy}>
+                  <Pill label={formatMealSlot(meal.slotType)} tone="accent" />
+                  <Text style={styles.mealTitle}>{meal.recipe.title}</Text>
+                </View>
+                <Text style={styles.calorieText}>{Math.round(meal.recipe.nutrition.calories)} kcal</Text>
               </View>
-              <Text style={styles.mealTitle}>{meal.recipe.title}</Text>
               <Text style={styles.mealBody}>{meal.recipe.cuisine}</Text>
               <Text style={styles.mealBody}>{formatNutritionLine(meal.recipe.nutrition)}</Text>
+
+              <View style={styles.mealFooter}>
+                <Text style={styles.footerHint}>{meal.recipe.ingredients.length} ingredients</Text>
+                <Text style={styles.footerAction}>Open recipe</Text>
+              </View>
             </ScreenCard>
           </Pressable>
         ))}
@@ -81,44 +102,69 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   emptyWrap: {
     flex: 1,
     justifyContent: 'center',
     padding: spacing.md,
   },
-  cardTitle: {
-    color: colors.ink,
-    fontFamily: 'Georgia',
-    fontSize: 22,
+  heroMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  cardBody: {
-    color: colors.inkMuted,
-    fontSize: 14,
-    lineHeight: 20,
+  cardPressed: {
+    opacity: 0.94,
   },
   mealCard: {
     gap: spacing.sm,
   },
   mealHeader: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  mealSlot: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
+  mealHeaderCopy: {
+    flex: 1,
+    gap: spacing.sm,
+    paddingRight: spacing.sm,
   },
   mealTitle: {
     color: colors.ink,
-    fontSize: 19,
-    fontWeight: '700',
+    fontFamily: 'Georgia',
+    fontSize: 23,
+    lineHeight: 28,
+  },
+  calorieText: {
+    color: colors.accentStrong,
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
   },
   mealBody: {
     color: colors.inkMuted,
     fontSize: 14,
+    lineHeight: 20,
+  },
+  mealFooter: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  footerHint: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  footerAction: {
+    color: colors.accentStrong,
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
 });

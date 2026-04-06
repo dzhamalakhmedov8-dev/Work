@@ -1,10 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReplanReason, ReplanScope } from '@nutrition-planner/shared';
 
-import { AppTextInput, Pill, PrimaryButton, ScreenCard, SectionTitle, SecondaryButton } from '../components/ui';
+import {
+  AppTextInput,
+  ChoiceChip,
+  HeroPanel,
+  PrimaryButton,
+  ScreenCard,
+  SecondaryButton,
+  SectionTitle,
+} from '../components/ui';
 import { useAppStore } from '../lib/app-store';
 import { colors, spacing } from '../theme';
 
@@ -12,7 +20,7 @@ const reasons: Array<{ label: string; value: ReplanReason }> = [
   { label: 'Refresh', value: 'refresh' },
   { label: 'Skipped it', value: 'skip' },
   { label: 'Disliked it', value: 'dislike' },
-  { label: 'Ingredient missing', value: 'ingredient_unavailable' },
+  { label: 'Missing ingredient', value: 'ingredient_unavailable' },
 ];
 
 export default function ReplanModalScreen() {
@@ -55,52 +63,59 @@ export default function ReplanModalScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ScreenCard style={styles.hero}>
-          <Pill label={`Scope: ${scope}`} tone="accent" />
-          <SectionTitle
-            title="Swap or regenerate"
-            subtitle="Use this flow to replace one meal, rebuild a single day, or refresh the whole week while keeping constraints intact."
-          />
-        </ScreenCard>
+        <HeroPanel
+          eyebrow="Replan"
+          title="Swap or regenerate without losing the rest of the week."
+          subtitle="Use this flow to replace one meal, rebuild a single day, or refresh the whole schedule while keeping your constraints intact."
+          tone="accent"
+        />
 
         <ScreenCard>
-          <Text style={styles.label}>Reason</Text>
-          <View style={styles.choiceRow}>
-            {reasons.map((option) => {
-              const active = option.value === reason;
-              return (
-                <Text
-                  key={option.value}
-                  onPress={() => setReason(option.value)}
-                  style={[styles.choice, active ? styles.choiceActive : null]}
-                >
-                  {option.label}
-                </Text>
-              );
-            })}
-          </View>
+          <SectionTitle
+            eyebrow="Why change it?"
+            title={`Scope: ${scope}`}
+            subtitle="The reason helps the planner produce a more useful replacement."
+          />
 
-          <Text style={styles.label}>Block foods for this replan only</Text>
+          <View style={styles.choiceWrap}>
+            {reasons.map((option) => (
+              <ChoiceChip
+                key={option.value}
+                label={option.label}
+                active={option.value === reason}
+                onPress={() => setReason(option.value)}
+              />
+            ))}
+          </View>
+        </ScreenCard>
+
+        <ScreenCard tone="muted">
+          <SectionTitle
+            eyebrow="Optional guidance"
+            title="Shape this one replan"
+            subtitle="These extra hints apply only to the current replacement request."
+          />
+
           <AppTextInput
             value={blockedFoods}
             onChangeText={setBlockedFoods}
-            placeholder="Salmon, chickpeas"
+            placeholder="Block foods: salmon, chickpeas"
           />
-
-          <Text style={styles.label}>Bias toward cuisines</Text>
           <AppTextInput
             value={preferredCuisines}
             onChangeText={setPreferredCuisines}
-            placeholder="Mediterranean, Asian-inspired"
+            placeholder="Bias toward: Mediterranean, Asian-inspired"
           />
+        </ScreenCard>
 
+        <View style={styles.actions}>
           <PrimaryButton
             label={busy ? 'Updating...' : 'Apply replan'}
             onPress={applyReplan}
             disabled={busy}
           />
           <SecondaryButton label="Cancel" onPress={() => router.back()} disabled={busy} />
-        </ScreenCard>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -114,35 +129,14 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
-  hero: {
-    gap: spacing.md,
-  },
-  label: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  choiceRow: {
+  choiceWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  choice: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    color: colors.ink,
-    overflow: 'hidden',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  choiceActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-    color: colors.accentStrong,
+  actions: {
+    gap: spacing.sm,
   },
 });

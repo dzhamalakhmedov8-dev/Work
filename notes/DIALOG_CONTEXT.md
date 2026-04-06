@@ -80,6 +80,19 @@ This file preserves the stable context of the current collaboration so we do not
   - Public health endpoint:
     - `https://nutrition-planner-mobile.vercel.app/api/health`
   - The hosted web app no longer depends on `127.0.0.1:4000` by default
+- Mobile UI direction:
+  - The app is being shaped as a mobile-first product rather than an internal dashboard
+  - The active visual language is warm editorial nutrition planning:
+    - sand backgrounds
+    - elevated cream cards
+    - dark green primary actions
+    - warm orange emphasis
+    - serif display headings with simpler body copy
+  - The main UX focus is:
+    - clearer first-run onboarding
+    - stronger weekly overview
+    - easier day-to-meal drill-down
+    - cleaner shopping list readability on phones
 
 ### Playwright setup
 

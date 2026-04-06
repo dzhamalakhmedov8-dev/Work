@@ -2,7 +2,15 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppTextInput, InfoBanner, PrimaryButton, ScreenCard, SecondaryButton, SectionTitle } from '../../components/ui';
+import {
+  AppTextInput,
+  HeroPanel,
+  InfoBanner,
+  PrimaryButton,
+  ScreenCard,
+  SecondaryButton,
+  SectionTitle,
+} from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
 import { colors, spacing } from '../../theme';
 
@@ -75,15 +83,21 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <SectionTitle
-          title="Settings and backup"
-          subtitle="Web deployments use the built-in API automatically. Override the URL here only for local or LAN testing."
+        <HeroPanel
+          eyebrow="Settings"
+          title="Backup, validate, and control how this app connects."
+          subtitle="Published web builds use the built-in API automatically. Override it only when you intentionally want to point the app somewhere else."
+          tone="muted"
         />
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
         <ScreenCard>
-          <Text style={styles.label}>API base URL</Text>
+          <SectionTitle
+            eyebrow="Connection"
+            title="API base URL"
+            subtitle="Leave the hosted app on its default value. Use a LAN URL only for local testing."
+          />
           <AppTextInput
             autoCapitalize="none"
             autoCorrect={false}
@@ -91,30 +105,36 @@ export default function SettingsScreen() {
             onChangeText={setDraftApiUrl}
             placeholder="https://your-api.example.com"
           />
-          <Text style={styles.helper}>
-            Leave the published web app on its default value. Use a LAN IP only when testing against your own local API.
-          </Text>
           <PrimaryButton label="Save API URL" onPress={saveApiUrl} disabled={busy} />
         </ScreenCard>
 
-        <ScreenCard>
-          <Text style={styles.label}>Installation ID</Text>
+        <ScreenCard tone="muted">
+          <SectionTitle
+            eyebrow="Device"
+            title="Installation identity"
+            subtitle="Useful when debugging or comparing exports between devices."
+          />
           <Text style={styles.mono}>{installationId}</Text>
         </ScreenCard>
 
         <ScreenCard>
-          <Text style={styles.label}>Plan maintenance</Text>
+          <SectionTitle
+            eyebrow="Maintenance"
+            title="Plan checks and backup"
+            subtitle="Export and import keep the app local-first, while validation double-checks the current plan."
+          />
           <SecondaryButton label="Validate current plan" onPress={validate} disabled={busy} />
           <SecondaryButton label="Export JSON backup" onPress={exportBackup} disabled={busy} />
           <SecondaryButton label="Import JSON backup" onPress={importBackup} disabled={busy} />
         </ScreenCard>
 
-        <ScreenCard>
-          <Text style={styles.label}>Danger zone</Text>
-          <Text style={styles.helper}>
-            Reset removes the local profile, current plan, and stored history from SQLite.
-          </Text>
-          <SecondaryButton label="Reset local data" onPress={reset} disabled={busy} />
+        <ScreenCard tone="warm">
+          <SectionTitle
+            eyebrow="Danger zone"
+            title="Reset local data"
+            subtitle="This removes the stored profile, the active weekly plan, and local history from the current device."
+          />
+          <PrimaryButton label="Reset local data" onPress={reset} disabled={busy} tone="warm" />
         </ScreenCard>
       </ScrollView>
     </SafeAreaView>
@@ -129,22 +149,12 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  label: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  helper: {
-    color: colors.inkMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    paddingBottom: spacing.xxl + 52,
   },
   mono: {
     color: colors.ink,
-    fontSize: 14,
     fontFamily: 'Courier',
+    fontSize: 13,
+    lineHeight: 19,
   },
 });
