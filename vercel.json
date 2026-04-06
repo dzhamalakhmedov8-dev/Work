@@ -6,12 +6,8 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/day/:dayIndex",
-      "destination": "/day/[dayIndex].html"
-    },
-    {
-      "source": "/meal/:mealId",
-      "destination": "/meal/[mealId].html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
