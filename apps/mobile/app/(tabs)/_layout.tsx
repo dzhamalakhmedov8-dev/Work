@@ -47,6 +47,13 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: tabIcon('person-outline'),
+        }}
+      />
+      <Tabs.Screen
         name="week"
         options={{
           title: 'Week',
@@ -58,13 +65,6 @@ export default function TabLayout() {
         options={{
           title: 'Shop',
           tabBarIcon: tabIcon('basket-outline'),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: tabIcon('person-outline'),
         }}
       />
       <Tabs.Screen

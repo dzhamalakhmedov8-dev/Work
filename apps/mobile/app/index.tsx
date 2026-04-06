@@ -25,7 +25,7 @@ export default function IndexScreen() {
     return <Redirect href="/onboarding" />;
   }
 
-  return <Redirect href="/(tabs)/week" />;
+  return <Redirect href="/(tabs)/profile" />;
 }
 
 const styles = StyleSheet.create({

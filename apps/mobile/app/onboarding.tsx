@@ -268,7 +268,7 @@ export default function OnboardingScreen() {
       clearError();
       await saveProfile(previewProfile);
       await generateWeek(previewProfile);
-      router.replace('/(tabs)/week');
+      router.replace('/(tabs)/profile');
     } catch {
       // Error is already stored in the app store and shown inline on this screen.
     }
