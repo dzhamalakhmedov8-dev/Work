@@ -110,6 +110,25 @@
 - Verified after the redesign:
   - `npm run typecheck`
   - `npm run vercel-build`
+- Polished the web loading and 404 experiences:
+  - improved the initial loading copy and presentation on `apps/mobile/app/index.tsx`
+  - upgraded the not-found screen with clearer recovery UI on `apps/mobile/app/+not-found.tsx`
+- Fixed Vercel route handling for direct public links into the exported Expo app:
+  - enabled clean URLs at the root Vercel config
+  - added a catch-all SPA fallback rewrite to `index.html`
+  - added explicit rewrites for dynamic planner routes:
+    - `/day/:dayIndex`
+    - `/meal/:mealId`
+- Verified the following production URLs now return `200`:
+  - `https://nutrition-planner-mobile.vercel.app/`
+  - `https://nutrition-planner-mobile.vercel.app/week`
+  - `https://nutrition-planner-mobile.vercel.app/onboarding`
+  - `https://nutrition-planner-mobile.vercel.app/profile`
+  - `https://nutrition-planner-mobile.vercel.app/settings`
+  - `https://nutrition-planner-mobile.vercel.app/shopping`
+  - `https://nutrition-planner-mobile.vercel.app/day/test-day`
+  - `https://nutrition-planner-mobile.vercel.app/meal/test-meal`
+  - `https://nutrition-planner-mobile.vercel.app/api/health`
 
 ## Next Update Rule
 

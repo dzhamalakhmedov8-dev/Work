@@ -77,9 +77,21 @@ This file preserves the stable context of the current collaboration so we do not
     - `https://nutrition-planner-mobile.vercel.app`
   - Root-level Vercel config is used so workspace dependencies like `packages/shared` are available during cloud builds
   - The production deployment now includes same-origin Vercel API routes under `/api`
+  - The production deployment now also supports direct browser navigation to app routes without falling back to 404:
+    - `/week`
+    - `/onboarding`
+    - `/profile`
+    - `/settings`
+    - `/shopping`
+    - `/day/<id>`
+    - `/meal/<id>`
   - Public health endpoint:
     - `https://nutrition-planner-mobile.vercel.app/api/health`
   - The hosted web app no longer depends on `127.0.0.1:4000` by default
+  - Current Vercel routing strategy:
+    - `cleanUrls: true`
+    - explicit rewrites for dynamic route placeholders under `/day/:dayIndex` and `/meal/:mealId`
+    - catch-all SPA fallback to `/index.html` for unhandled app routes
 - Mobile UI direction:
   - The app is being shaped as a mobile-first product rather than an internal dashboard
   - The active visual language is warm editorial nutrition planning:
@@ -141,3 +153,4 @@ This file preserves the stable context of the current collaboration so we do not
 ## Preference From User
 
 - Preserve conversation context in Markdown files going forward.
+- Avoid mixing unrelated local files into git commits when deploying.
