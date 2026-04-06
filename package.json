@@ -1,0 +1,16 @@
+{
+  "name": "nutrition-planner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nutrition Planner Mobile MVP monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run start --workspace @nutrition-planner/mobile",
+    "dev:api": "npm run dev --workspace @nutrition-planner/api",
+    "test": "npm run test --workspace @nutrition-planner/shared && npm run test --workspace @nutrition-planner/api",
+    "typecheck": "npm run typecheck --workspace @nutrition-planner/shared && npm run typecheck --workspace @nutrition-planner/api && npm run typecheck --workspace @nutrition-planner/mobile"
+  }
+}
