@@ -13,9 +13,6 @@
       "resizeMode": "contain",
       "backgroundColor": "#f5f0e4"
     },
-    "extra": {
-      "apiUrl": "http://127.0.0.1:4000"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nutritionplanner.app"

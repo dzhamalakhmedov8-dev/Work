@@ -76,6 +76,10 @@ This file preserves the stable context of the current collaboration so we do not
   - Production URL:
     - `https://nutrition-planner-mobile.vercel.app`
   - Root-level Vercel config is used so workspace dependencies like `packages/shared` are available during cloud builds
+  - The production deployment now includes same-origin Vercel API routes under `/api`
+  - Public health endpoint:
+    - `https://nutrition-planner-mobile.vercel.app/api/health`
+  - The hosted web app no longer depends on `127.0.0.1:4000` by default
 
 ### Playwright setup
 

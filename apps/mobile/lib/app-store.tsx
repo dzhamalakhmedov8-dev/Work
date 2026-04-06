@@ -14,7 +14,13 @@ import {
   type WeeklyPlan,
 } from '@nutrition-planner/shared';
 
-import { generatePlan, getDefaultApiUrl, replanPlan, validatePlan } from './api';
+import {
+  generatePlan,
+  getDefaultApiUrl,
+  replanPlan,
+  shouldUpgradeStoredApiUrl,
+  validatePlan,
+} from './api';
 import { clearStore, readJson, removeKey, writeJson } from './database';
 
 type AppSettings = {
@@ -74,16 +80,18 @@ const safeParsePlanHistory = (value: unknown): WeeklyPlan[] => {
 };
 
 const safeParseSettings = (value: unknown): AppSettings => {
+  const defaultApiUrl = getDefaultApiUrl();
+
   if (!value || typeof value !== 'object') {
-    return defaultSettings;
+    return { apiBaseUrl: defaultApiUrl };
   }
 
   const candidate = value as Partial<AppSettings>;
+  const rawApiUrl = typeof candidate.apiBaseUrl === 'string' ? candidate.apiBaseUrl.trim() : '';
+
   return {
     apiBaseUrl:
-      typeof candidate.apiBaseUrl === 'string' && candidate.apiBaseUrl.trim().length > 0
-        ? candidate.apiBaseUrl.trim()
-        : defaultSettings.apiBaseUrl,
+      rawApiUrl.length > 0 && !shouldUpgradeStoredApiUrl(rawApiUrl) ? rawApiUrl : defaultApiUrl,
   };
 };
 

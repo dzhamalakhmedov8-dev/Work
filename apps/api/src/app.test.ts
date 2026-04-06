@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
-import { generateWeeklyPlan, type UserProfile } from '@nutrition-planner/shared';
+import { generateWeeklyPlan, type UserProfile } from '../../../packages/shared/src';
 
 import { createApp } from './app';
 

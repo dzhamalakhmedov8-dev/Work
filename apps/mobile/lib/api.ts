@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import {
   generatePlanInputSchema,
   replanPlanInputSchema,
@@ -13,8 +14,39 @@ import {
 
 const fallbackApiUrl = 'http://127.0.0.1:4000';
 
+const localhostApiUrls = new Set(['http://127.0.0.1:4000', 'http://localhost:4000']);
+
+const normalizeApiBaseUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+
+const getConfiguredApiUrl = (): string | null => {
+  const configured = (Constants.expoConfig?.extra?.apiUrl as string | undefined)?.trim();
+  return configured ? normalizeApiBaseUrl(configured) : null;
+};
+
+const getHostedWebApiUrl = (): string | null => {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+
+  if (window.location.protocol !== 'https:') {
+    return null;
+  }
+
+  return `${window.location.origin}/api`;
+};
+
 export const getDefaultApiUrl = (): string =>
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? fallbackApiUrl;
+  getConfiguredApiUrl() ?? getHostedWebApiUrl() ?? fallbackApiUrl;
+
+export const shouldUpgradeStoredApiUrl = (value: string): boolean => {
+  const hostedWebApiUrl = getHostedWebApiUrl();
+
+  if (!hostedWebApiUrl) {
+    return false;
+  }
+
+  return localhostApiUrls.has(normalizeApiBaseUrl(value));
+};
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null);
@@ -36,7 +68,7 @@ const postJson = async <T>(
   body: unknown,
   installationId: string,
 ): Promise<T> => {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await fetch(`${normalizeApiBaseUrl(apiBaseUrl)}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -79,6 +79,20 @@
 - Added a root-level Vercel config plus a root `vercel-build` script for monorepo-aware deployment.
 - Verified a successful production deployment on Vercel:
   - `https://nutrition-planner-mobile.vercel.app`
+- Diagnosed why the shared Vercel link still failed for other users:
+  - the deployed web app was pointing to `http://127.0.0.1:4000` as its default API
+- Added root-level Vercel API routes under `api/` for:
+  - `GET /api/health`
+  - `POST /api/v1/plan/generate`
+  - `POST /api/v1/plan/replan`
+  - `POST /api/v1/plan/validate`
+- Refactored API request handling into shared app-side handlers so Express and Vercel routes can reuse the same logic.
+- Updated the web client to use the same-origin deployed API by default on hosted HTTPS builds, while keeping localhost for local development.
+- Fixed Vercel serverless runtime resolution issues by switching API-side shared imports to direct source imports from `packages/shared/src`.
+- Added a generic `apps/mobile/lib/database.ts` barrel so mobile typecheck works with the platform-specific database files.
+- Verified public production endpoints:
+  - `GET https://nutrition-planner-mobile.vercel.app/api/health` returns `200`
+  - `POST https://nutrition-planner-mobile.vercel.app/api/v1/plan/generate` returns `200` for a valid profile payload
 
 ## Next Update Rule
 

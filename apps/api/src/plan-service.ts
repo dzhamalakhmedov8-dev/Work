@@ -8,7 +8,7 @@ import {
   type ValidatePlanInput,
   type WeeklyPlan,
   weeklyPlanSchema,
-} from '@nutrition-planner/shared';
+} from '../../../packages/shared/src';
 
 const llmEnabled = (): boolean =>
   process.env.NUTRITION_ENABLE_LLM === '1' &&

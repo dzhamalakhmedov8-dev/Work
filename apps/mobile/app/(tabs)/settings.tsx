@@ -77,7 +77,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <SectionTitle
           title="Settings and backup"
-          subtitle="v1 is local-first. Use this tab to point the app at your API and move data between devices."
+          subtitle="Web deployments use the built-in API automatically. Override the URL here only for local or LAN testing."
         />
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
@@ -89,10 +89,10 @@ export default function SettingsScreen() {
             autoCorrect={false}
             value={draftApiUrl}
             onChangeText={setDraftApiUrl}
-            placeholder="http://127.0.0.1:4000"
+            placeholder="https://your-api.example.com"
           />
           <Text style={styles.helper}>
-            Use a LAN IP instead of `127.0.0.1` when testing from a physical phone.
+            Leave the published web app on its default value. Use a LAN IP only when testing against your own local API.
           </Text>
           <PrimaryButton label="Save API URL" onPress={saveApiUrl} disabled={busy} />
         </ScreenCard>
