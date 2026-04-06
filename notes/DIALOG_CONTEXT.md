@@ -15,7 +15,10 @@ This file preserves the stable context of the current collaboration so we do not
 ## Current Workspace State
 
 - Workspace: `C:\Users\serge\OneDrive\Документы\New project 4`
-- Git repository exists but changes are not committed yet.
+- Git repository exists locally and is connected to GitHub:
+  - `https://github.com/dzhamalakhmedov8-dev/Work.git`
+- Active branch:
+  - `main`
 - Portable Node.js exists locally under `.tools/`.
 - The repository is now a monorepo for the Nutrition Planner MVP.
 - Root workspaces:
@@ -58,12 +61,21 @@ This file preserves the stable context of the current collaboration so we do not
   - root tests pass
   - root typecheck passes
   - mobile typecheck passes
-  - Expo runtime was not launched in this turn, so mobile UI is verified by implementation and static checks rather than manual device execution
+  - Expo web launch was verified locally
+  - Vercel production deployment succeeds from the monorepo root
 - Main launch commands:
   - API: `npm run dev:api`
   - Mobile: `npm run dev:mobile`
   - Tests: `npm test`
   - Typecheck: `npm run typecheck`
+  - Vercel build: `npm run vercel-build`
+- Deployment state:
+  - Vercel project name:
+    - `nutrition-planner-mobile`
+  - GitHub repo is connected to the Vercel project
+  - Production URL:
+    - `https://nutrition-planner-mobile.vercel.app`
+  - Root-level Vercel config is used so workspace dependencies like `packages/shared` are available during cloud builds
 
 ### Playwright setup
 

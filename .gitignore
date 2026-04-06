@@ -4,8 +4,10 @@ packages/*/node_modules/
 playwright-report/
 test-results/
 .tools/
+.vercel/
 .expo/
 **/.expo/
+**/.vercel/
 dist/
 coverage/
 *.db

@@ -69,6 +69,16 @@
   - `npm test`
   - `npm run typecheck`
 - Did not launch the Expo app on a simulator/device during this turn, so runtime UI behavior is not manually smoke-tested yet.
+- Pushed the project to GitHub:
+  - `https://github.com/dzhamalakhmedov8-dev/Work.git`
+- Authenticated the Vercel CLI and created project:
+  - `nutrition-planner-mobile`
+- Connected the Vercel project to the GitHub repository.
+- Investigated the first Vercel build failure and found the cause:
+  - Vercel was building only `apps/mobile`, so the workspace dependency on `packages/shared` was missing
+- Added a root-level Vercel config plus a root `vercel-build` script for monorepo-aware deployment.
+- Verified a successful production deployment on Vercel:
+  - `https://nutrition-planner-mobile.vercel.app`
 
 ## Next Update Rule
 
