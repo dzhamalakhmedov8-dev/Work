@@ -1,6 +1,7 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Pill, SecondaryButton } from '../components/ui';
 import { colors } from '../theme';
 
 export default function NotFoundScreen() {
@@ -8,12 +9,13 @@ export default function NotFoundScreen() {
     <>
       <Stack.Screen options={{ title: 'Not found' }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This route does not exist.</Text>
+        <Pill label="Route not found" tone="warm" />
+        <Text style={styles.title}>That screen doesn&apos;t exist in this planner.</Text>
         <Text style={styles.description}>
-          Head back to the planner home and continue from the active weekly plan.
+          Go back to the planner home and continue from your current week, shopping list, or onboarding flow.
         </Text>
-        <Link href="/" style={styles.link}>
-          Go to planner home
+        <Link href="/" asChild>
+          <SecondaryButton label="Go to planner home" onPress={() => undefined} />
         </Link>
       </View>
     </>
@@ -25,7 +27,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
     flex: 1,
-    gap: 12,
+    gap: 14,
     justifyContent: 'center',
     padding: 24,
   },
@@ -33,17 +35,15 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: 'Georgia',
     fontSize: 28,
+    lineHeight: 34,
+    maxWidth: 320,
     textAlign: 'center',
   },
   description: {
     color: colors.inkMuted,
     fontSize: 15,
     lineHeight: 22,
+    maxWidth: 320,
     textAlign: 'center',
-  },
-  link: {
-    color: colors.accent,
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

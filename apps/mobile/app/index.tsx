@@ -1,8 +1,9 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { Pill } from '../components/ui';
 import { useAppStore } from '../lib/app-store';
-import { colors } from '../theme';
+import { colors, spacing } from '../theme';
 
 export default function IndexScreen() {
   const { ready, profile } = useAppStore();
@@ -10,8 +11,12 @@ export default function IndexScreen() {
   if (!ready) {
     return (
       <View style={styles.container}>
+        <Pill label="Nutrition Planner" tone="accent" />
         <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.title}>Preparing your nutrition workspace...</Text>
+        <Text style={styles.title}>Preparing your weekly nutrition workspace...</Text>
+        <Text style={styles.subtitle}>
+          Loading your profile, current plan, and the controls that keep meals and shopping in sync.
+        </Text>
       </View>
     );
   }
@@ -28,7 +33,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
     flex: 1,
-    gap: 14,
+    gap: spacing.sm,
     justifyContent: 'center',
     padding: 24,
   },
@@ -36,6 +41,14 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: 'Georgia',
     fontSize: 22,
+    lineHeight: 28,
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: colors.inkMuted,
+    fontSize: 14,
+    lineHeight: 21,
+    maxWidth: 320,
     textAlign: 'center',
   },
 });

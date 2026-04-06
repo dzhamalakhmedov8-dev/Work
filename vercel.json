@@ -2,5 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
   "buildCommand": "npm run vercel-build",
-  "outputDirectory": "apps/mobile/dist"
+  "outputDirectory": "apps/mobile/dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/day/:dayIndex",
+      "destination": "/day/[dayIndex].html"
+    },
+    {
+      "source": "/meal/:mealId",
+      "destination": "/meal/[mealId].html"
+    }
+  ]
 }
