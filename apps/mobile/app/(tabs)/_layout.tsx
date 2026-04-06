@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 
-import { colors, radii, shadows } from '../../theme';
+import { colors } from '../../theme';
 
 const tabIcon =
   (name: ComponentProps<typeof Ionicons>['name']) =>
@@ -29,27 +29,20 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.inkMuted,
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '700',
           marginBottom: 4,
         },
         tabBarItemStyle: {
-          borderRadius: radii.md,
-          marginHorizontal: 4,
-          marginVertical: 4,
+          paddingTop: 4,
         },
-        tabBarActiveBackgroundColor: colors.surfaceRaised,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopWidth: 0,
-          borderRadius: radii.lg,
-          height: 74,
-          marginBottom: 12,
-          marginHorizontal: 12,
-          paddingBottom: 6,
-          paddingTop: 8,
-          position: 'absolute',
-          ...shadows.card,
+          backgroundColor: colors.surfaceRaised,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 68,
+          paddingBottom: 8,
+          paddingTop: 6,
         },
       }}
     >
@@ -71,14 +64,13 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: tabIcon('body-outline'),
+          tabBarIcon: tabIcon('person-outline'),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: tabIcon('options-outline'),
+          href: null,
         }}
       />
       <Tabs.Screen

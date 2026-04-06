@@ -12,6 +12,7 @@ import {
   ScreenCard,
   SecondaryButton,
   SectionTitle,
+  ValidationStatusCard,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
 import {
@@ -24,7 +25,7 @@ import {
 import { colors, spacing } from '../../theme';
 
 export default function ProfileScreen() {
-  const { busy, currentPlan, generateWeek, profile } = useAppStore();
+  const { currentPlan, generateWeek, operations, profile } = useAppStore();
 
   if (!profile) {
     return (
@@ -32,7 +33,7 @@ export default function ProfileScreen() {
         <View style={styles.emptyWrap}>
           <EmptyState
             title="No profile loaded"
-            description="Run onboarding first so the planner has enough data to calculate targets and build a usable weekly plan."
+            description="Run onboarding first so the planner has enough information to calculate targets and build a realistic week."
           />
         </View>
       </SafeAreaView>
@@ -52,21 +53,23 @@ export default function ProfileScreen() {
         <HeroPanel
           eyebrow="Profile"
           title={profile.name ? `${profile.name}'s planning profile` : 'Your planning profile'}
-          subtitle="These values stay local on the device and shape every generated week, replan, and shopping list."
+          subtitle="Edit the body inputs, hard rules, or taste direction whenever life changes. The week regenerates from this source of truth."
           tone="accent"
         >
           <View style={styles.heroPills}>
             <Pill label={formatGoal(profile.goal)} tone="ink" />
             <Pill label={formatActivityLevel(profile.activityLevel)} tone="ink" />
-            <Pill label={`${profile.mealsPerDay} meals/day`} tone="ink" />
+            <Pill label={`${profile.mealsPerDay} eating moments`} tone="ink" />
           </View>
         </HeroPanel>
+
+        {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
 
         <ScreenCard>
           <SectionTitle
             eyebrow="Snapshot"
             title="Body and routine"
-            subtitle="Core inputs used by the nutrition engine."
+            subtitle="These values directly shape calories, protein floors, and meal sizes."
           />
           <View style={styles.metricRow}>
             <MetricTile label="Age" value={String(profile.age)} />
@@ -83,10 +86,20 @@ export default function ProfileScreen() {
               value={profile.restingHeartRate ? `${profile.restingHeartRate} bpm` : 'Not set'}
             />
           </View>
+          <View style={styles.actionStack}>
+            <SecondaryButton
+              label="Edit body inputs"
+              onPress={() => router.push('/onboarding?step=1')}
+            />
+            <SecondaryButton
+              label="Edit planning rules"
+              onPress={() => router.push('/onboarding?step=2')}
+            />
+          </View>
         </ScreenCard>
 
         {currentPlan ? (
-          <ScreenCard tone="muted">
+          <ScreenCard tone="base">
             <SectionTitle
               eyebrow="Targets"
               title="Calculated nutrition targets"
@@ -120,7 +133,7 @@ export default function ProfileScreen() {
         <ScreenCard>
           <SectionTitle
             eyebrow="Hard rules"
-            title="Dietary constraints"
+            title="Dietary exclusions"
             subtitle="These exclusions are enforced during both generation and validation."
           />
           <DetailRow label="Allergies" value={formatList(profile.dietaryConstraints.allergies)} />
@@ -132,13 +145,17 @@ export default function ProfileScreen() {
             label="Disliked foods"
             value={formatList(profile.dietaryConstraints.dislikedFoods)}
           />
+          <SecondaryButton
+            label="Edit hard rules"
+            onPress={() => router.push('/onboarding?step=3')}
+          />
         </ScreenCard>
 
         <ScreenCard tone="warm">
           <SectionTitle
-            eyebrow="Taste profile"
-            title="Preferred direction"
-            subtitle="These are soft preferences that help the planner feel more like your food."
+            eyebrow="Taste direction"
+            title="Preferred cuisines and rhythm"
+            subtitle="These are soft preferences that steer the planner without overriding hard exclusions."
           />
           <View style={styles.heroPills}>
             {preferencePills.length > 0 ? (
@@ -147,17 +164,27 @@ export default function ProfileScreen() {
               <Pill label="No taste preferences saved" />
             )}
           </View>
+          <SecondaryButton
+            label="Edit taste profile"
+            onPress={() => router.push('/onboarding?step=3')}
+          />
         </ScreenCard>
 
-        <PrimaryButton
-          label={busy ? 'Generating...' : 'Generate fresh week'}
-          onPress={() => generateWeek()}
-          disabled={busy}
-        />
-        <SecondaryButton
-          label="Edit onboarding answers"
-          onPress={() => router.push('/onboarding')}
-        />
+        <ScreenCard tone="base">
+          <SectionTitle
+            eyebrow="App controls"
+            title="Plan and maintenance actions"
+            subtitle="Open app settings for backup, validation, and advanced connection controls."
+          />
+          <View style={styles.actionStack}>
+            <PrimaryButton
+              label={operations.generating ? 'Generating week...' : 'Generate fresh week'}
+              onPress={() => generateWeek()}
+              disabled={operations.generating}
+            />
+            <SecondaryButton label="Open app settings" onPress={() => router.push('/settings')} />
+          </View>
+        </ScreenCard>
       </ScrollView>
     </SafeAreaView>
   );
@@ -171,7 +198,7 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xxl + 52,
+    paddingBottom: spacing.xxl + 36,
   },
   emptyWrap: {
     flex: 1,
@@ -185,6 +212,9 @@ const styles = StyleSheet.create({
   },
   metricRow: {
     flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionStack: {
     gap: spacing.sm,
   },
 });

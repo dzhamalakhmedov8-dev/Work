@@ -1,13 +1,14 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  CollapsibleSection,
   EmptyState,
   HeroPanel,
   InfoBanner,
   MetricTile,
   Pill,
-  ScreenCard,
   SectionTitle,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
@@ -15,7 +16,7 @@ import { formatShortDateTime } from '../../lib/format';
 import { colors, radii, spacing } from '../../theme';
 
 export default function ShoppingScreen() {
-  const { currentPlan, error } = useAppStore();
+  const { currentPlan, error, isShoppingItemChecked, toggleShoppingItem } = useAppStore();
 
   if (!currentPlan) {
     return (
@@ -23,7 +24,7 @@ export default function ShoppingScreen() {
         <View style={styles.emptyWrap}>
           <EmptyState
             title="No shopping list yet"
-            description="Generate a weekly plan first and this tab will merge ingredients into one clean grocery list with exact gram totals."
+            description="Generate a weekly plan first and this tab will turn ingredients into one store-friendly checklist."
           />
         </View>
       </SafeAreaView>
@@ -41,55 +42,84 @@ export default function ShoppingScreen() {
 
   const categories = Object.entries(grouped).sort(([left], [right]) => left.localeCompare(right));
   const totalGrams = currentPlan.shoppingList.items.reduce((sum, item) => sum + item.grams, 0);
+  const completedItems = currentPlan.shoppingList.items.filter((item) =>
+    isShoppingItemChecked(item.ingredientId),
+  ).length;
+  const completionLabel = `${completedItems}/${currentPlan.shoppingList.items.length} done`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <HeroPanel
           eyebrow="Shopping"
-          title="One list for the whole week."
-          subtitle={`Generated ${formatShortDateTime(currentPlan.shoppingList.generatedAt)} from your active plan.`}
+          title="A grocery list you can use in motion."
+          subtitle={`Built from your active plan on ${formatShortDateTime(currentPlan.shoppingList.generatedAt)}.`}
           tone="accent"
         >
           <View style={styles.metricRow}>
-            <MetricTile label="Items" value={String(currentPlan.shoppingList.items.length)} />
-            <MetricTile label="Categories" value={String(categories.length)} />
+            <MetricTile label="Progress" value={completionLabel} tone="accent" />
+            <MetricTile
+              label="Remaining"
+              value={String(currentPlan.shoppingList.items.length - completedItems)}
+            />
           </View>
-          <Pill label={`Total weight ${Math.round(totalGrams)} g`} tone="ink" />
+          <View style={styles.heroPills}>
+            <Pill label={`${categories.length} categories`} tone="ink" />
+            <Pill label={`${Math.round(totalGrams)} g total`} tone="ink" />
+          </View>
         </HeroPanel>
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
         <SectionTitle
-          eyebrow="By category"
-          title="Store-friendly grouping"
-          subtitle="Ingredient totals update automatically whenever a meal or a full day is regenerated."
+          eyebrow="Store mode"
+          title="Check items as you go"
+          subtitle="Category groups collapse automatically into progress clusters, but the grams remain visible as the nutrition source of truth."
         />
 
         {categories.map(([category, items]) => {
-          const categoryGrams = items.reduce((sum, item) => sum + item.grams, 0);
+          const completedInCategory = items.filter((item) => isShoppingItemChecked(item.ingredientId)).length;
 
           return (
-            <ScreenCard key={category}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderCopy}>
-                  <Text style={styles.categoryTitle}>{category}</Text>
-                  <Text style={styles.categoryMeta}>{Math.round(categoryGrams)} g total</Text>
-                </View>
-                <Pill label={`${items.length} items`} tone="accent" />
-              </View>
+            <CollapsibleSection
+              key={category}
+              title={category}
+              subtitle={`${completedInCategory}/${items.length} done`}
+              defaultExpanded
+              trailing={<Pill label={`${Math.round(items.reduce((sum, item) => sum + item.grams, 0))} g`} />}
+            >
               <View style={styles.itemsList}>
-                {items.map((item) => (
-                  <View key={item.ingredientId} style={styles.row}>
-                    <View style={styles.itemNameWrap}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemMeta}>{item.category}</Text>
-                    </View>
-                    <Text style={styles.itemValue}>{Math.round(item.grams)} g</Text>
-                  </View>
-                ))}
+                {items.map((item) => {
+                  const checked = isShoppingItemChecked(item.ingredientId);
+
+                  return (
+                    <Pressable
+                      key={item.ingredientId}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked }}
+                      accessibilityLabel={`${item.name}, ${Math.round(item.grams)} grams`}
+                      onPress={() => toggleShoppingItem(item.ingredientId)}
+                      style={({ pressed }) => [
+                        styles.itemRow,
+                        checked ? styles.itemRowChecked : null,
+                        pressed ? styles.itemRowPressed : null,
+                      ]}
+                    >
+                      <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
+                        {checked ? <View style={styles.checkboxInner} /> : null}
+                      </View>
+                      <View style={styles.itemCopy}>
+                        <Text style={[styles.itemName, checked ? styles.itemNameChecked : null]}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.itemMeta}>{Math.round(item.grams)} g</Text>
+                      </View>
+                      <Text style={styles.itemAction}>{checked ? 'Done' : 'Tap to check'}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            </ScreenCard>
+            </CollapsibleSection>
           );
         })}
       </ScrollView>
@@ -105,7 +135,7 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xxl + 52,
+    paddingBottom: spacing.xxl + 36,
   },
   emptyWrap: {
     flex: 1,
@@ -116,57 +146,70 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  cardHeader: {
-    alignItems: 'flex-start',
+  heroPills: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cardHeaderCopy: {
-    flex: 1,
-    gap: 4,
-    paddingRight: spacing.sm,
-  },
-  categoryTitle: {
-    color: colors.ink,
-    fontFamily: 'Georgia',
-    fontSize: 24,
-    lineHeight: 29,
-  },
-  categoryMeta: {
-    color: colors.inkMuted,
-    fontSize: 13,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   itemsList: {
     gap: spacing.sm,
   },
-  row: {
+  itemRow: {
     alignItems: 'center',
     backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.border,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
-  itemNameWrap: {
+  itemRowChecked: {
+    backgroundColor: colors.successSoft,
+    borderColor: '#b8d3c3',
+  },
+  itemRowPressed: {
+    opacity: 0.94,
+  },
+  checkbox: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.accentDeep,
+    borderColor: colors.accentDeep,
+  },
+  checkboxInner: {
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  itemCopy: {
     flex: 1,
     gap: 2,
-    paddingRight: spacing.sm,
   },
   itemName: {
     color: colors.ink,
     fontSize: 15,
     fontWeight: '700',
   },
+  itemNameChecked: {
+    color: colors.inkSoft,
+  },
   itemMeta: {
     color: colors.inkMuted,
-    fontSize: 12,
+    fontSize: 13,
   },
-  itemValue: {
+  itemAction: {
     color: colors.accentStrong,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -27,15 +27,35 @@ type AppSettings = {
   apiBaseUrl: string;
 };
 
+type AppOperationState = {
+  savingProfile: boolean;
+  generating: boolean;
+  replanning: boolean;
+  validating: boolean;
+  updatingApiUrl: boolean;
+  exporting: boolean;
+  importing: boolean;
+  resetting: boolean;
+};
+
+type ToastState = {
+  id: string;
+  message: string;
+  tone: 'neutral' | 'success' | 'danger';
+};
+
 type AppStoreValue = {
   ready: boolean;
   busy: boolean;
+  operations: AppOperationState;
   error: string | null;
+  toast: ToastState | null;
   installationId: string;
   apiBaseUrl: string;
   profile: UserProfile | null;
   currentPlan: WeeklyPlan | null;
   planHistory: WeeklyPlan[];
+  shoppingChecks: Record<string, boolean>;
   saveProfile: (profile: UserProfile) => Promise<void>;
   generateWeek: (profileOverride?: UserProfile) => Promise<void>;
   replanCurrentPlan: (request: ReplanRequest) => Promise<void>;
@@ -44,12 +64,34 @@ type AppStoreValue = {
   exportBackupFile: () => Promise<string | null>;
   importBackupFile: () => Promise<boolean>;
   resetAllData: () => Promise<void>;
+  toggleShoppingItem: (ingredientId: string) => void;
+  isShoppingItemChecked: (ingredientId: string, planIdOverride?: string) => boolean;
+  showToast: (message: string, tone?: ToastState['tone']) => void;
+  clearToast: () => void;
   clearError: () => void;
 };
 
 const defaultSettings: AppSettings = {
   apiBaseUrl: getDefaultApiUrl(),
 };
+
+const defaultOperations: AppOperationState = {
+  savingProfile: false,
+  generating: false,
+  replanning: false,
+  validating: false,
+  updatingApiUrl: false,
+  exporting: false,
+  importing: false,
+  resetting: false,
+};
+
+const installationIdKey = 'installationId';
+const settingsKey = 'settings';
+const profileKey = 'profile';
+const currentPlanKey = 'currentPlan';
+const planHistoryKey = 'planHistory';
+const shoppingChecksKey = 'shoppingChecks';
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
@@ -95,49 +137,93 @@ const safeParseSettings = (value: unknown): AppSettings => {
   };
 };
 
+const safeParseShoppingChecks = (value: unknown): Record<string, boolean> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, boolean>>((accumulator, [key, state]) => {
+    if (typeof state === 'boolean') {
+      accumulator[key] = state;
+    }
+
+    return accumulator;
+  }, {});
+};
+
+const buildShoppingCheckKey = (planId: string, ingredientId: string): string =>
+  `${planId}:${ingredientId}`;
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [operations, setOperations] = useState<AppOperationState>(defaultOperations);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [installationId, setInstallationId] = useState('');
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultSettings.apiBaseUrl);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [currentPlan, setCurrentPlan] = useState<WeeklyPlan | null>(null);
   const [planHistory, setPlanHistory] = useState<WeeklyPlan[]>([]);
+  const [shoppingChecks, setShoppingChecks] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const storedInstallationId = readJson<string>('installationId') ?? createInstallationId();
-    const storedSettings = safeParseSettings(readJson<AppSettings>('settings'));
-    const storedProfile = safeParseProfile(readJson<UserProfile>('profile'));
-    const storedCurrentPlan = safeParsePlan(readJson<WeeklyPlan>('currentPlan'));
-    const storedPlanHistory = safeParsePlanHistory(readJson<WeeklyPlan[]>('planHistory'));
+    const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
+    const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
+    const storedProfile = safeParseProfile(readJson<UserProfile>(profileKey));
+    const storedCurrentPlan = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
+    const storedPlanHistory = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
+    const storedShoppingChecks = safeParseShoppingChecks(
+      readJson<Record<string, boolean>>(shoppingChecksKey),
+    );
 
-    writeJson('installationId', storedInstallationId);
-    writeJson('settings', storedSettings);
+    writeJson(installationIdKey, storedInstallationId);
+    writeJson(settingsKey, storedSettings);
     setInstallationId(storedInstallationId);
     setApiBaseUrl(storedSettings.apiBaseUrl);
     setProfile(storedProfile);
     setCurrentPlan(storedCurrentPlan);
     setPlanHistory(storedPlanHistory);
+    setShoppingChecks(storedShoppingChecks);
     setReady(true);
   }, []);
+
+  const busy = useMemo(() => Object.values(operations).some(Boolean), [operations]);
+
+  const setOperation = (key: keyof AppOperationState, value: boolean) => {
+    setOperations((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
 
   const clearError = () => {
     setError(null);
   };
 
+  const showToast = (message: string, tone: ToastState['tone'] = 'neutral') => {
+    setToast({
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      message,
+      tone,
+    });
+  };
+
+  const clearToast = () => {
+    setToast(null);
+  };
+
   const saveProfile = async (nextProfile: UserProfile) => {
-    setBusy(true);
+    setOperation('savingProfile', true);
     setError(null);
 
     try {
-      writeJson('profile', nextProfile);
+      writeJson(profileKey, nextProfile);
       setProfile(nextProfile);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to save profile');
       throw nextError;
     } finally {
-      setBusy(false);
+      setOperation('savingProfile', false);
     }
   };
 
@@ -149,15 +235,15 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setBusy(true);
+    setOperation('generating', true);
     setError(null);
 
     try {
       const plan = await generatePlan(apiBaseUrl, effectiveProfile, installationId);
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson('currentPlan', plan);
-      writeJson('planHistory', nextHistory);
+      writeJson(currentPlanKey, plan);
+      writeJson(planHistoryKey, nextHistory);
       setCurrentPlan(plan);
       setPlanHistory(nextHistory);
     } catch (nextError) {
@@ -168,7 +254,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       throw nextError;
     } finally {
-      setBusy(false);
+      setOperation('generating', false);
     }
   };
 
@@ -178,7 +264,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setBusy(true);
+    setOperation('replanning', true);
     setError(null);
 
     try {
@@ -193,8 +279,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson('currentPlan', plan);
-      writeJson('planHistory', nextHistory);
+      writeJson(currentPlanKey, plan);
+      writeJson(planHistoryKey, nextHistory);
       setCurrentPlan(plan);
       setPlanHistory(nextHistory);
     } catch (nextError) {
@@ -205,7 +291,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       throw nextError;
     } finally {
-      setBusy(false);
+      setOperation('replanning', false);
     }
   };
 
@@ -214,7 +300,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
-    setBusy(true);
+    setOperation('validating', true);
     setError(null);
 
     try {
@@ -231,7 +317,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         validation,
       };
 
-      writeJson('currentPlan', nextPlan);
+      writeJson(currentPlanKey, nextPlan);
       setCurrentPlan(nextPlan);
       return validation;
     } catch (nextError) {
@@ -242,82 +328,96 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       throw nextError;
     } finally {
-      setBusy(false);
+      setOperation('validating', false);
     }
   };
 
   const updateApiBaseUrl = async (nextUrl: string) => {
-    const normalized = nextUrl.trim() || defaultSettings.apiBaseUrl;
-    const nextSettings = { apiBaseUrl: normalized };
+    setOperation('updatingApiUrl', true);
+    try {
+      const normalized = nextUrl.trim() || defaultSettings.apiBaseUrl;
+      const nextSettings = { apiBaseUrl: normalized };
 
-    writeJson('settings', nextSettings);
-    setApiBaseUrl(normalized);
+      writeJson(settingsKey, nextSettings);
+      setApiBaseUrl(normalized);
+    } finally {
+      setOperation('updatingApiUrl', false);
+    }
   };
 
   const exportBackupFile = async (): Promise<string | null> => {
-    const bundle: ExportBundleV1 = exportBundleV1Schema.parse({
-      version: exportBundleVersion,
-      exportedAt: new Date().toISOString(),
-      profile,
-      currentPlan,
-      planHistory,
-    });
-    const baseDirectory =
-      FileSystemLegacy.documentDirectory ?? FileSystemLegacy.cacheDirectory;
+    setOperation('exporting', true);
+    setError(null);
 
-    if (!baseDirectory) {
-      setError('No writable file directory is available on this device.');
-      return null;
-    }
-
-    const fileUri = `${baseDirectory}nutrition-planner-backup-${Date.now()}.json`;
-    await FileSystemLegacy.writeAsStringAsync(fileUri, JSON.stringify(bundle, null, 2), {
-      encoding: 'utf8',
-    });
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Export Nutrition Planner backup',
+    try {
+      const bundle: ExportBundleV1 = exportBundleV1Schema.parse({
+        version: exportBundleVersion,
+        exportedAt: new Date().toISOString(),
+        profile,
+        currentPlan,
+        planHistory,
       });
-    }
+      const baseDirectory =
+        FileSystemLegacy.documentDirectory ?? FileSystemLegacy.cacheDirectory;
 
-    return fileUri;
+      if (!baseDirectory) {
+        setError('No writable file directory is available on this device.');
+        return null;
+      }
+
+      const fileUri = `${baseDirectory}nutrition-planner-backup-${Date.now()}.json`;
+      await FileSystemLegacy.writeAsStringAsync(fileUri, JSON.stringify(bundle, null, 2), {
+        encoding: 'utf8',
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export Nutrition Planner backup',
+        });
+      }
+
+      return fileUri;
+    } finally {
+      setOperation('exporting', false);
+    }
   };
 
   const importBackupFile = async (): Promise<boolean> => {
+    setOperation('importing', true);
     setError(null);
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'application/json',
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-
-    if (result.canceled || !result.assets?.[0]) {
-      return false;
-    }
 
     try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return false;
+      }
+
       const fileContent = await FileSystemLegacy.readAsStringAsync(result.assets[0].uri, {
         encoding: 'utf8',
       });
       const bundle = exportBundleV1Schema.parse(JSON.parse(fileContent));
-      const nextSettings = safeParseSettings(readJson<AppSettings>('settings'));
+      const nextSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
 
       if (bundle.profile) {
-        writeJson('profile', bundle.profile);
+        writeJson(profileKey, bundle.profile);
       } else {
-        removeKey('profile');
+        removeKey(profileKey);
       }
 
       if (bundle.currentPlan) {
-        writeJson('currentPlan', bundle.currentPlan);
+        writeJson(currentPlanKey, bundle.currentPlan);
       } else {
-        removeKey('currentPlan');
+        removeKey(currentPlanKey);
       }
 
-      writeJson('planHistory', bundle.planHistory);
-      writeJson('settings', nextSettings);
+      writeJson(planHistoryKey, bundle.planHistory);
+      writeJson(settingsKey, nextSettings);
       setProfile(bundle.profile);
       setCurrentPlan(bundle.currentPlan);
       setPlanHistory(bundle.planHistory);
@@ -329,21 +429,57 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         nextError instanceof Error ? nextError.message : 'Failed to import the backup file.',
       );
       throw nextError;
+    } finally {
+      setOperation('importing', false);
     }
   };
 
   const resetAllData = async () => {
-    clearStore();
-    const nextInstallationId = createInstallationId();
+    setOperation('resetting', true);
+    try {
+      clearStore();
+      const nextInstallationId = createInstallationId();
 
-    writeJson('installationId', nextInstallationId);
-    writeJson('settings', defaultSettings);
-    setInstallationId(nextInstallationId);
-    setApiBaseUrl(defaultSettings.apiBaseUrl);
-    setProfile(null);
-    setCurrentPlan(null);
-    setPlanHistory([]);
-    setError(null);
+      writeJson(installationIdKey, nextInstallationId);
+      writeJson(settingsKey, defaultSettings);
+      writeJson(shoppingChecksKey, {});
+      setInstallationId(nextInstallationId);
+      setApiBaseUrl(defaultSettings.apiBaseUrl);
+      setProfile(null);
+      setCurrentPlan(null);
+      setPlanHistory([]);
+      setShoppingChecks({});
+      setError(null);
+    } finally {
+      setOperation('resetting', false);
+    }
+  };
+
+  const isShoppingItemChecked = (ingredientId: string, planIdOverride?: string): boolean => {
+    const activePlanId = planIdOverride ?? currentPlan?.id;
+
+    if (!activePlanId) {
+      return false;
+    }
+
+    return shoppingChecks[buildShoppingCheckKey(activePlanId, ingredientId)] ?? false;
+  };
+
+  const toggleShoppingItem = (ingredientId: string) => {
+    if (!currentPlan) {
+      return;
+    }
+
+    const itemKey = buildShoppingCheckKey(currentPlan.id, ingredientId);
+
+    setShoppingChecks((current) => {
+      const nextState = {
+        ...current,
+        [itemKey]: !current[itemKey],
+      };
+      writeJson(shoppingChecksKey, nextState);
+      return nextState;
+    });
   };
 
   return (
@@ -351,12 +487,15 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       value={{
         ready,
         busy,
+        operations,
         error,
+        toast,
         installationId,
         apiBaseUrl,
         profile,
         currentPlan,
         planHistory,
+        shoppingChecks,
         saveProfile,
         generateWeek,
         replanCurrentPlan,
@@ -365,6 +504,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         exportBackupFile,
         importBackupFile,
         resetAllData,
+        toggleShoppingItem,
+        isShoppingItemChecked,
+        showToast,
+        clearToast,
         clearError,
       }}
     >

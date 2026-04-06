@@ -12,6 +12,7 @@ import {
   ScreenCard,
   SecondaryButton,
   SectionTitle,
+  ValidationStatusCard,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
 import {
@@ -23,7 +24,7 @@ import {
 import { colors, radii, spacing } from '../../theme';
 
 export default function WeekScreen() {
-  const { busy, clearError, currentPlan, error, generateWeek, profile } = useAppStore();
+  const { clearError, currentPlan, error, generateWeek, operations, profile } = useAppStore();
 
   if (!profile) {
     return (
@@ -31,9 +32,9 @@ export default function WeekScreen() {
         <View style={styles.emptyWrap}>
           <EmptyState
             title="No profile yet"
-            description="Start with onboarding so the planner understands your goal, meal rhythm, and hard food constraints."
+            description="Start with onboarding so the planner understands your body, goal, meal rhythm, and hard food rules."
+            action={<PrimaryButton label="Open onboarding" onPress={() => router.replace('/onboarding')} />}
           />
-          <PrimaryButton label="Open onboarding" onPress={() => router.replace('/onboarding')} />
         </View>
       </SafeAreaView>
     );
@@ -44,23 +45,25 @@ export default function WeekScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <HeroPanel
           eyebrow="This week"
-          title={
-            currentPlan ? 'A seven-day plan you can actually follow.' : 'Generate your first week.'
-          }
+          title={currentPlan ? 'A compact weekly view you can scan fast.' : 'Generate your first week.'}
           subtitle={
             currentPlan
-              ? 'Open any day for recipe details, swap meals when life changes, and keep the shopping list synchronized.'
-              : 'Your profile is ready. Generate a realistic menu with exact ingredient grams and a full grocery list.'
+              ? 'Open a day for recipes and swaps, or rebuild the whole schedule without leaving the planner flow.'
+              : 'Your profile is ready. Build a realistic seven-day menu with grams, recipes, and a shopping list.'
           }
-          tone={currentPlan?.validation.isValid ? 'accent' : 'warm'}
+          tone={currentPlan ? 'accent' : 'warm'}
         >
           <View style={styles.heroPills}>
             <Pill label={formatGoal(profile.goal)} tone="ink" />
-            <Pill label={`${profile.mealsPerDay} moments/day`} tone="ink" />
             <Pill label={formatActivityLevel(profile.activityLevel)} tone="ink" />
+            <Pill label={`${profile.mealsPerDay} eating moments`} tone="ink" />
           </View>
           <View style={styles.metricRow}>
-            <MetricTile label="Target" value={currentPlan ? `${Math.round(currentPlan.targets.calories)} kcal` : '--'} />
+            <MetricTile
+              label="Calories target"
+              value={currentPlan ? `${Math.round(currentPlan.targets.calories)} kcal` : '--'}
+              tone="accent"
+            />
             <MetricTile
               label="Protein floor"
               value={currentPlan ? `${Math.round(currentPlan.targets.proteinFloorGrams)} g` : '--'}
@@ -70,82 +73,99 @@ export default function WeekScreen() {
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
-        <View style={styles.actionGroup}>
+        {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
+
+        <View style={styles.actionRow}>
           <PrimaryButton
-            label={busy ? 'Working...' : currentPlan ? 'Generate fresh week' : 'Generate week'}
+            label={
+              operations.generating
+                ? 'Generating week...'
+                : currentPlan
+                  ? 'Generate fresh week'
+                  : 'Generate week'
+            }
             onPress={() => {
               clearError();
               return generateWeek();
             }}
-            disabled={busy}
+            disabled={operations.generating}
           />
           {currentPlan ? (
             <SecondaryButton
-              label="Replan the whole week"
+              label="Replan week"
               onPress={() => router.push('/modal?scope=week')}
-              disabled={busy}
+              disabled={operations.generating || operations.replanning}
             />
           ) : null}
         </View>
 
         {!currentPlan ? (
           <EmptyState
-            title="Your control center starts here"
-            description="Once a week is generated, this screen becomes the daily planner with day cards, recipe drill-down, and one-tap replanning."
+            title="Your planner hub starts here"
+            description="Once a week exists, this screen becomes the fast overview for totals, plan status, and day-by-day drill-down."
           />
         ) : (
           <>
             <SectionTitle
-              eyebrow="Schedule"
-              title="Seven-day rhythm"
-              subtitle={`${currentPlan.validation.isValid ? 'Validated and ready to use.' : 'Plan generated with open validation notes.'} Tap a day to open recipes and swaps.`}
+              eyebrow="Seven-day rhythm"
+              title="Day cards built for quick scanning"
+              subtitle="Each card shows the nutrition total plus one lead meal. Open the day for the full meal list and swaps."
             />
 
-            {currentPlan.days.map((day) => (
-              <Pressable
-                key={day.id}
-                onPress={() =>
-                  router.push({
-                    pathname: '/day/[dayIndex]',
-                    params: { dayIndex: String(day.dayIndex) },
-                  })
-                }
-                style={({ pressed }) => [pressed ? styles.dayCardPressed : null]}
-              >
-                <ScreenCard style={styles.dayCard}>
-                  <View style={styles.dayHeader}>
-                    <View style={styles.dayHeaderCopy}>
-                      <Text style={styles.dayLabel}>{day.label}</Text>
-                      <Text style={styles.dayTotals}>{formatNutritionLine(day.totals)}</Text>
-                    </View>
-                    <Pill label={`${day.meals.length} meals`} tone="accent" />
-                  </View>
+            {currentPlan.days.map((day) => {
+              const leadMeal =
+                day.meals.find((meal) => meal.slotType === 'dinner') ?? day.meals[0];
+              const otherMeals = day.meals.length - 1;
 
-                  <View style={styles.dayMetaRow}>
-                    <Text style={styles.dayMetaText}>
-                      {Math.round(day.totals.calories / day.meals.length)} avg kcal per meal
-                    </Text>
-                    <Text style={styles.dayMetaArrow}>Open</Text>
-                  </View>
-
-                  <View style={styles.mealList}>
-                    {day.meals.map((meal) => (
-                      <View key={meal.id} style={styles.mealRow}>
-                        <View style={styles.mealSlotBadge}>
-                          <Text style={styles.mealSlotText}>{formatMealSlot(meal.slotType)}</Text>
-                        </View>
-                        <View style={styles.mealCopy}>
-                          <Text style={styles.mealTitle}>{meal.recipe.title}</Text>
-                          <Text style={styles.mealNutrition}>
-                            {Math.round(meal.recipe.nutrition.calories)} kcal | {meal.recipe.cuisine}
-                          </Text>
-                        </View>
+              return (
+                <Pressable
+                  key={day.id}
+                  accessibilityLabel={`${day.label}. ${Math.round(day.totals.calories)} calories. Lead meal ${leadMeal.recipe.title}. Open day plan.`}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/day/[dayIndex]',
+                      params: { dayIndex: String(day.dayIndex) },
+                    })
+                  }
+                  style={({ pressed }) => [styles.dayPressable, pressed ? styles.dayCardPressed : null]}
+                >
+                  <ScreenCard style={styles.dayCard} tone="elevated">
+                    <View style={styles.dayHeader}>
+                      <View style={styles.dayHeaderCopy}>
+                        <Text style={styles.dayLabel}>{day.label}</Text>
+                        <Text style={styles.dayTotals}>{formatNutritionLine(day.totals)}</Text>
                       </View>
-                    ))}
-                  </View>
-                </ScreenCard>
-              </Pressable>
-            ))}
+                      <Pill label={`${day.meals.length} meals`} tone="accent" />
+                    </View>
+
+                    <View style={styles.leadMealCard}>
+                      <View style={styles.leadMealCopy}>
+                        <Text style={styles.leadMealEyebrow}>{formatMealSlot(leadMeal.slotType)}</Text>
+                        <Text style={styles.leadMealTitle}>{leadMeal.recipe.title}</Text>
+                        <Text style={styles.leadMealMeta}>
+                          {Math.round(leadMeal.recipe.nutrition.calories)} kcal
+                          {' | '}
+                          {leadMeal.recipe.cuisine}
+                        </Text>
+                      </View>
+                      <Text style={styles.openHint}>Open day</Text>
+                    </View>
+
+                    <View style={styles.dayFooter}>
+                      <Text style={styles.dayFooterText}>
+                        {otherMeals > 0
+                          ? `${otherMeals} more ${otherMeals === 1 ? 'meal' : 'meals'} inside`
+                          : 'Single-meal view'}
+                      </Text>
+                      <Text style={styles.dayFooterText}>
+                        {Math.round(day.totals.calories / day.meals.length)} avg kcal/meal
+                      </Text>
+                    </View>
+                  </ScreenCard>
+                </Pressable>
+              );
+            })}
           </>
         )}
       </ScrollView>
@@ -161,11 +181,10 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xxl + 52,
+    paddingBottom: spacing.xxl + 36,
   },
   emptyWrap: {
     flex: 1,
-    gap: spacing.md,
     justifyContent: 'center',
     padding: spacing.md,
   },
@@ -178,14 +197,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  actionGroup: {
+  actionRow: {
     gap: spacing.sm,
   },
+  dayPressable: {
+    borderRadius: radii.md,
+  },
   dayCardPressed: {
-    opacity: 0.93,
+    opacity: 0.94,
   },
   dayCard: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   dayHeader: {
     alignItems: 'flex-start',
@@ -199,74 +221,58 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     color: colors.ink,
-    fontFamily: 'Georgia',
-    fontSize: 26,
-    lineHeight: 31,
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
   },
   dayTotals: {
     color: colors.inkMuted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  dayMetaRow: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  dayMetaText: {
-    color: colors.inkSoft,
     fontSize: 13,
-    fontWeight: '600',
+    lineHeight: 19,
   },
-  dayMetaArrow: {
-    color: colors.accentStrong,
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  mealList: {
-    gap: spacing.sm,
-  },
-  mealRow: {
+  leadMealCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.border,
     flexDirection: 'row',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
     padding: spacing.sm,
   },
-  mealSlotBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.accentSoft,
-    borderRadius: radii.xs,
-    justifyContent: 'center',
-    minHeight: 56,
-    paddingHorizontal: 10,
-    width: 88,
-  },
-  mealSlotText: {
-    color: colors.accentStrong,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  mealCopy: {
+  leadMealCopy: {
     flex: 1,
     gap: 2,
+    paddingRight: spacing.sm,
   },
-  mealTitle: {
+  leadMealEyebrow: {
+    color: colors.accentStrong,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  leadMealTitle: {
     color: colors.ink,
     fontSize: 15,
     fontWeight: '700',
+    lineHeight: 21,
   },
-  mealNutrition: {
+  leadMealMeta: {
     color: colors.inkMuted,
     fontSize: 13,
+    lineHeight: 18,
+  },
+  openHint: {
+    color: colors.accentStrong,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dayFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayFooterText: {
+    color: colors.inkMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

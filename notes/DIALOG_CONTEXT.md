@@ -100,11 +100,20 @@ This file preserves the stable context of the current collaboration so we do not
     - dark green primary actions
     - warm orange emphasis
     - serif display headings with simpler body copy
-  - The main UX focus is:
-    - clearer first-run onboarding
-    - stronger weekly overview
-    - easier day-to-meal drill-down
-    - cleaner shopping list readability on phones
+  - The current UX refactor direction is:
+    - step-based onboarding instead of one long form
+    - compact weekly overview with explicit validation status
+    - sticky mobile CTAs on day and meal drill-down screens
+    - local shopping checklist progress by item and category
+    - settings hidden from the primary tab bar and accessed from profile
+    - inline or snackbar feedback instead of success/info alerts
+  - The design-system layer now includes reusable mobile primitives for:
+    - segmented controls
+    - chip entry inputs
+    - collapsible sections
+    - sticky action bars
+    - snackbars
+    - validation status cards
 
 ### Playwright setup
 
@@ -154,3 +163,4 @@ This file preserves the stable context of the current collaboration so we do not
 
 - Preserve conversation context in Markdown files going forward.
 - Avoid mixing unrelated local files into git commits when deploying.
+- Keep the app optimized for mobile users first, even when the web export is used for sharing.

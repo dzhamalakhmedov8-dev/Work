@@ -1,12 +1,24 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, View } from 'react-native';
 
-import { AppStoreProvider } from '../lib/app-store';
+import { Snackbar } from '../components/ui';
+import { AppStoreProvider, useAppStore } from '../lib/app-store';
 import { colors, radii } from '../theme';
 
 export default function RootLayout() {
   return (
     <AppStoreProvider>
+      <AppShell />
+    </AppStoreProvider>
+  );
+}
+
+function AppShell() {
+  const { clearToast, toast } = useAppStore();
+
+  return (
+    <View style={styles.shell}>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -15,7 +27,7 @@ export default function RootLayout() {
           headerTintColor: colors.ink,
           headerShadowVisible: false,
           headerTitleStyle: {
-            fontFamily: 'Georgia',
+            fontSize: 18,
             fontWeight: '700',
           },
           headerLargeTitleShadowVisible: false,
@@ -27,19 +39,15 @@ export default function RootLayout() {
         <Stack.Screen
           name="day/[dayIndex]"
           options={{
-            title: 'Day Plan',
-            headerStyle: {
-              backgroundColor: colors.surfaceRaised,
-            },
+            title: 'Day plan',
+            headerBackTitle: 'Week',
           }}
         />
         <Stack.Screen
           name="meal/[mealId]"
           options={{
             title: 'Recipe',
-            headerStyle: {
-              backgroundColor: colors.surfaceRaised,
-            },
+            headerBackTitle: 'Day',
           }}
         />
         <Stack.Screen
@@ -55,6 +63,16 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </AppStoreProvider>
+      {toast ? (
+        <Snackbar message={toast.message} tone={toast.tone} onDismiss={clearToast} />
+      ) : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  shell: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+});

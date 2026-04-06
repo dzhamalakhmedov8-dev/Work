@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type {
   ActivityLevel,
@@ -9,28 +9,32 @@ import type {
   Sex,
   UserProfile,
 } from '@nutrition-planner/shared';
+import { calculateNutritionTargets } from '@nutrition-planner/shared';
 
 import {
   AppTextInput,
+  ChipInput,
   ChoiceChip,
-  FieldLabel,
+  CollapsibleSection,
   HeroPanel,
   InfoBanner,
+  InlineFieldHint,
+  MetricTile,
   Pill,
   PrimaryButton,
   ScreenCard,
+  SecondaryButton,
   SectionTitle,
+  SegmentedControl,
+  StickyActionBar,
 } from '../components/ui';
 import { useAppStore } from '../lib/app-store';
+import { formatActivityLevel, formatGoal, formatList } from '../lib/format';
 import { colors, spacing } from '../theme';
 
-const parseList = (value: string): string[] =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+type OnboardingStep = 1 | 2 | 3 | 4;
 
-const buildProfile = (input: {
+type OnboardingDraft = {
   name: string;
   age: string;
   sex: Sex;
@@ -41,86 +45,244 @@ const buildProfile = (input: {
   goal: Goal;
   activityLevel: ActivityLevel;
   mealsPerDay: 3 | 4;
-  allergies: string;
-  forbiddenFoods: string;
-  dislikedFoods: string;
-  preferredCuisines: string;
+  allergies: string[];
+  forbiddenFoods: string[];
+  dislikedFoods: string[];
+  preferredCuisines: string[];
   cookingTimePreference: CookingTimePreference;
-}): UserProfile => {
+};
+
+const clampStep = (value: number): OnboardingStep => {
+  if (value <= 1) {
+    return 1;
+  }
+  if (value >= 4) {
+    return 4;
+  }
+  return value as OnboardingStep;
+};
+
+const parseNumber = (value: string): number | null => {
+  if (!value.trim()) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const validateRange = (
+  value: string,
+  min: number,
+  max: number,
+  label: string,
+  optional = false,
+): string | null => {
+  const parsed = parseNumber(value);
+
+  if (parsed === null) {
+    return optional ? null : `${label} is required.`;
+  }
+
+  if (parsed < min || parsed > max) {
+    return `${label} must be between ${min} and ${max}.`;
+  }
+
+  return null;
+};
+
+const createDraft = (profile?: UserProfile | null): OnboardingDraft => ({
+  name: profile?.name ?? '',
+  age: profile ? String(profile.age) : '30',
+  sex: profile?.sex ?? 'male',
+  heightCm: profile ? String(profile.heightCm) : '178',
+  weightKg: profile ? String(profile.weightKg) : '78',
+  restingHeartRate: profile?.restingHeartRate ? String(profile.restingHeartRate) : '',
+  targetWeightKg: profile?.targetWeightKg ? String(profile.targetWeightKg) : '',
+  goal: profile?.goal ?? 'maintain',
+  activityLevel: profile?.activityLevel ?? 'moderate',
+  mealsPerDay: profile?.mealsPerDay ?? 4,
+  allergies: profile?.dietaryConstraints.allergies ?? [],
+  forbiddenFoods: profile?.dietaryConstraints.forbiddenFoods ?? [],
+  dislikedFoods: profile?.dietaryConstraints.dislikedFoods ?? [],
+  preferredCuisines:
+    profile?.dietaryConstraints.preferredCuisines ?? ['Mediterranean', 'Balanced bowls'],
+  cookingTimePreference: profile?.dietaryConstraints.cookingTimePreference ?? 'balanced',
+});
+
+const buildProfile = (draft: OnboardingDraft, existingProfile?: UserProfile | null): UserProfile => {
   const now = new Date().toISOString();
+
   return {
-    id: `profile-${Date.now().toString(36)}`,
-    createdAt: now,
+    id: existingProfile?.id ?? `profile-${Date.now().toString(36)}`,
+    createdAt: existingProfile?.createdAt ?? now,
     updatedAt: now,
-    name: input.name.trim() || undefined,
-    age: Number(input.age),
-    sex: input.sex,
-    heightCm: Number(input.heightCm),
-    weightKg: Number(input.weightKg),
-    restingHeartRate: input.restingHeartRate ? Number(input.restingHeartRate) : undefined,
-    targetWeightKg: input.targetWeightKg ? Number(input.targetWeightKg) : undefined,
-    goal: input.goal,
-    activityLevel: input.activityLevel,
-    mealsPerDay: input.mealsPerDay,
+    name: draft.name.trim() || undefined,
+    age: Number(draft.age),
+    sex: draft.sex,
+    heightCm: Number(draft.heightCm),
+    weightKg: Number(draft.weightKg),
+    restingHeartRate: draft.restingHeartRate ? Number(draft.restingHeartRate) : undefined,
+    targetWeightKg: draft.targetWeightKg ? Number(draft.targetWeightKg) : undefined,
+    goal: draft.goal,
+    activityLevel: draft.activityLevel,
+    mealsPerDay: draft.mealsPerDay,
     dietaryConstraints: {
-      allergies: parseList(input.allergies),
-      forbiddenFoods: parseList(input.forbiddenFoods),
-      dislikedFoods: parseList(input.dislikedFoods),
-      preferredCuisines: parseList(input.preferredCuisines),
-      cookingTimePreference: input.cookingTimePreference,
+      allergies: draft.allergies,
+      forbiddenFoods: draft.forbiddenFoods,
+      dislikedFoods: draft.dislikedFoods,
+      preferredCuisines: draft.preferredCuisines,
+      cookingTimePreference: draft.cookingTimePreference,
     },
   };
 };
 
-export default function OnboardingScreen() {
-  const { busy, error, saveProfile, generateWeek, clearError } = useAppStore();
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('30');
-  const [sex, setSex] = useState<Sex>('male');
-  const [heightCm, setHeightCm] = useState('178');
-  const [weightKg, setWeightKg] = useState('78');
-  const [restingHeartRate, setRestingHeartRate] = useState('');
-  const [targetWeightKg, setTargetWeightKg] = useState('');
-  const [goal, setGoal] = useState<Goal>('maintain');
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
-  const [mealsPerDay, setMealsPerDay] = useState<3 | 4>(4);
-  const [allergies, setAllergies] = useState('');
-  const [forbiddenFoods, setForbiddenFoods] = useState('');
-  const [dislikedFoods, setDislikedFoods] = useState('');
-  const [preferredCuisines, setPreferredCuisines] = useState('Mediterranean, balanced bowls');
-  const [cookingTimePreference, setCookingTimePreference] =
-    useState<CookingTimePreference>('balanced');
+const stepCopy: Record<
+  OnboardingStep,
+  { eyebrow: string; title: string; subtitle: string }
+> = {
+  1: {
+    eyebrow: 'Step 1 of 4',
+    title: 'Body inputs that shape calories and portions.',
+    subtitle: 'Start with the numbers that directly affect energy targets and protein floors.',
+  },
+  2: {
+    eyebrow: 'Step 2 of 4',
+    title: 'Planning rules that change the week structure.',
+    subtitle: 'Pick the goal, activity, meal rhythm, and cooking pace you want the planner to respect.',
+  },
+  3: {
+    eyebrow: 'Step 3 of 4',
+    title: 'Hard food rules and taste direction.',
+    subtitle: 'Allergies, forbidden foods, and dislikes are treated as hard constraints. Taste preferences are soft guidance.',
+  },
+  4: {
+    eyebrow: 'Step 4 of 4',
+    title: 'Review the setup before generating your week.',
+    subtitle: 'Check the preview, confirm the hard rules, and then build a seven-day plan.',
+  },
+};
 
-  const submit = async () => {
+export default function OnboardingScreen() {
+  const params = useLocalSearchParams<{ step?: string | string[] }>();
+  const requestedStep = clampStep(
+    Number(Array.isArray(params.step) ? params.step[0] : params.step ?? '1'),
+  );
+  const {
+    busy,
+    clearError,
+    error,
+    operations,
+    profile,
+    ready,
+    saveProfile,
+    generateWeek,
+  } = useAppStore();
+
+  const [draft, setDraft] = useState<OnboardingDraft>(() => createDraft(profile));
+  const [step, setStep] = useState<OnboardingStep>(requestedStep);
+  const [bootstrappedFromProfile, setBootstrappedFromProfile] = useState(Boolean(profile));
+
+  useEffect(() => {
+    setStep(requestedStep);
+  }, [requestedStep]);
+
+  useEffect(() => {
+    if (!bootstrappedFromProfile && profile) {
+      setDraft(createDraft(profile));
+      setBootstrappedFromProfile(true);
+    }
+  }, [bootstrappedFromProfile, profile]);
+
+  const bodyErrors = useMemo(
+    () => ({
+      age: validateRange(draft.age, 18, 99, 'Age'),
+      heightCm: validateRange(draft.heightCm, 120, 250, 'Height'),
+      weightKg: validateRange(draft.weightKg, 35, 300, 'Weight'),
+      restingHeartRate: validateRange(
+        draft.restingHeartRate,
+        30,
+        220,
+        'Resting heart rate',
+        true,
+      ),
+      targetWeightKg: validateRange(draft.targetWeightKg, 35, 300, 'Target weight', true),
+    }),
+    [draft.age, draft.heightCm, draft.restingHeartRate, draft.targetWeightKg, draft.weightKg],
+  );
+
+  const stepErrors: Record<OnboardingStep, string[]> = useMemo(
+    () => ({
+      1: Object.values(bodyErrors).filter((value): value is string => Boolean(value)),
+      2: [],
+      3: [],
+      4: Object.values(bodyErrors).filter((value): value is string => Boolean(value)),
+    }),
+    [bodyErrors],
+  );
+
+  const previewProfile = useMemo(() => {
+    if (stepErrors[4].length > 0) {
+      return null;
+    }
+
     try {
-      clearError();
-      const profile = buildProfile({
-        name,
-        age,
-        sex,
-        heightCm,
-        weightKg,
-        restingHeartRate,
-        targetWeightKg,
-        goal,
-        activityLevel,
-        mealsPerDay,
-        allergies,
-        forbiddenFoods,
-        dislikedFoods,
-        preferredCuisines,
-        cookingTimePreference,
-      });
-      await saveProfile(profile);
-      await generateWeek(profile);
-      router.replace('/(tabs)/week');
-    } catch (submitError) {
-      Alert.alert(
-        'Could not finish setup',
-        submitError instanceof Error ? submitError.message : 'Please review your values and try again.',
-      );
+      return buildProfile(draft, profile);
+    } catch {
+      return null;
+    }
+  }, [draft, profile, stepErrors]);
+
+  const previewTargets = useMemo(() => {
+    if (!previewProfile) {
+      return null;
+    }
+
+    try {
+      return calculateNutritionTargets(previewProfile);
+    } catch {
+      return null;
+    }
+  }, [previewProfile]);
+
+  const nextStep = () => {
+    clearError();
+    if (step < 4) {
+      setStep((current) => clampStep(current + 1));
     }
   };
+
+  const previousStep = () => {
+    clearError();
+    if (step > 1) {
+      setStep((current) => clampStep(current - 1));
+    }
+  };
+
+  const submit = async () => {
+    if (!previewProfile) {
+      return;
+    }
+
+    try {
+      clearError();
+      await saveProfile(previewProfile);
+      await generateWeek(previewProfile);
+      router.replace('/(tabs)/week');
+    } catch {
+      // Error is already stored in the app store and shown inline on this screen.
+    }
+  };
+
+  if (!ready) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingWrap}>
+          <Text style={styles.loadingText}>Loading your onboarding workspace...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -130,227 +292,343 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <HeroPanel
-          eyebrow="Mobile meal planning"
-          title="Build a realistic week around your body, appetite, and non-negotiables."
-          subtitle="You answer a few fast questions once. The app turns them into a seven-day menu, exact ingredient grams, and a shopping list you can actually use."
-          tone="warm"
+          eyebrow={stepCopy[step].eyebrow}
+          title={stepCopy[step].title}
+          subtitle={stepCopy[step].subtitle}
+          tone={step === 4 ? 'accent' : 'warm'}
         >
+          <View style={styles.progressRow}>
+            {[1, 2, 3, 4].map((value) => (
+              <View
+                key={value}
+                style={[styles.progressSegment, value <= step ? styles.progressSegmentActive : null]}
+              />
+            ))}
+          </View>
           <View style={styles.heroPills}>
-            <Pill label="7-day plan" tone="ink" />
-            <Pill label="Recipes in grams" tone="ink" />
-            <Pill label="Auto shopping list" tone="ink" />
+            <Pill label={draft.mealsPerDay === 4 ? '4 eating moments' : '3 eating moments'} tone="ink" />
+            <Pill label={formatGoal(draft.goal)} tone="ink" />
+            <Pill label={formatActivityLevel(draft.activityLevel)} tone="ink" />
           </View>
         </HeroPanel>
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
+        {stepErrors[step].length > 0 ? (
+          <InfoBanner message={stepErrors[step][0]} tone="warm" />
+        ) : null}
 
-        <ScreenCard>
-          <SectionTitle
-            eyebrow="Step 1"
-            title="Body profile"
-            subtitle="These numbers power calories, protein floors, and portion sizing."
-          />
+        {step === 1 ? (
+          <ScreenCard>
+            <SectionTitle
+              eyebrow="Body profile"
+              title="Core measurements"
+              subtitle="These are the required inputs for the nutrition math."
+            />
 
-          <FieldLabel label="Name (optional)" />
-          <AppTextInput value={name} onChangeText={setName} placeholder="Alex" />
-
-          <View style={styles.inputRow}>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Age" />
-              <AppTextInput value={age} onChangeText={setAge} keyboardType="number-pad" />
-            </View>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Sex for BMR" />
-              <ChoiceWrap>
-                <ChoiceChip label="Male" active={sex === 'male'} onPress={() => setSex('male')} />
-                <ChoiceChip
-                  label="Female"
-                  active={sex === 'female'}
-                  onPress={() => setSex('female')}
-                />
-              </ChoiceWrap>
-            </View>
-          </View>
-
-          <View style={styles.inputRow}>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Height (cm)" />
-              <AppTextInput
-                value={heightCm}
-                onChangeText={setHeightCm}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Weight (kg)" />
-              <AppTextInput
-                value={weightKg}
-                onChangeText={setWeightKg}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputRow}>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Resting heart rate" />
-              <AppTextInput
-                value={restingHeartRate}
-                onChangeText={setRestingHeartRate}
+            <FieldGroup>
+              <LabeledInput
+                label="Age"
+                value={draft.age}
+                onChangeText={(value) => setDraft((current) => ({ ...current, age: value }))}
                 keyboardType="number-pad"
-                placeholder="Optional"
+                hint="Use years. The planner supports adult profiles."
               />
-            </View>
-            <View style={styles.inputColumn}>
-              <FieldLabel label="Target weight" />
-              <AppTextInput
-                value={targetWeightKg}
-                onChangeText={setTargetWeightKg}
+              <SegmentedControl
+                label="Sex used for BMR"
+                value={draft.sex}
+                onChange={(value) => setDraft((current) => ({ ...current, sex: value }))}
+                options={[
+                  { label: 'Male', value: 'male' as const },
+                  { label: 'Female', value: 'female' as const },
+                ]}
+              />
+            </FieldGroup>
+
+            <View style={styles.inputRow}>
+              <LabeledInput
+                label="Height (cm)"
+                value={draft.heightCm}
+                onChangeText={(value) => setDraft((current) => ({ ...current, heightCm: value }))}
                 keyboardType="decimal-pad"
-                placeholder="Optional"
+                style={styles.inputColumn}
+              />
+              <LabeledInput
+                label="Weight (kg)"
+                value={draft.weightKg}
+                onChangeText={(value) => setDraft((current) => ({ ...current, weightKg: value }))}
+                keyboardType="decimal-pad"
+                style={styles.inputColumn}
               />
             </View>
-          </View>
-        </ScreenCard>
 
-        <ScreenCard tone="muted">
-          <SectionTitle
-            eyebrow="Step 2"
-            title="Planning rules"
-            subtitle="This is where the week becomes personal instead of generic."
-          />
+            <CollapsibleSection
+              title="Advanced inputs"
+              subtitle="Optional values for a more personal profile record."
+            >
+              <LabeledInput
+                label="Name"
+                value={draft.name}
+                onChangeText={(value) => setDraft((current) => ({ ...current, name: value }))}
+                placeholder="Alex"
+              />
+              <View style={styles.inputRow}>
+                <LabeledInput
+                  label="Resting heart rate"
+                  value={draft.restingHeartRate}
+                  onChangeText={(value) =>
+                    setDraft((current) => ({ ...current, restingHeartRate: value }))
+                  }
+                  keyboardType="number-pad"
+                  placeholder="Optional"
+                  style={styles.inputColumn}
+                />
+                <LabeledInput
+                  label="Target weight"
+                  value={draft.targetWeightKg}
+                  onChangeText={(value) =>
+                    setDraft((current) => ({ ...current, targetWeightKg: value }))
+                  }
+                  keyboardType="decimal-pad"
+                  placeholder="Optional"
+                  style={styles.inputColumn}
+                />
+              </View>
+            </CollapsibleSection>
+          </ScreenCard>
+        ) : null}
 
-          <FieldLabel label="Goal" />
-          <ChoiceWrap>
-            <ChoiceChip label="Lose" active={goal === 'lose'} onPress={() => setGoal('lose')} />
-            <ChoiceChip
-              label="Maintain"
-              active={goal === 'maintain'}
-              onPress={() => setGoal('maintain')}
+        {step === 2 ? (
+          <ScreenCard tone="base">
+            <SectionTitle
+              eyebrow="Week structure"
+              title="Planning rules"
+              subtitle="These choices change the target calories, the meal rhythm, and the kind of recipes the week will contain."
             />
-            <ChoiceChip label="Gain" active={goal === 'gain'} onPress={() => setGoal('gain')} />
-          </ChoiceWrap>
 
-          <FieldLabel label="Activity level" />
-          <ChoiceWrap>
-            <ChoiceChip
-              label="Sedentary"
-              active={activityLevel === 'sedentary'}
-              onPress={() => setActivityLevel('sedentary')}
+            <SegmentedControl
+              label="Goal"
+              value={draft.goal}
+              onChange={(value) => setDraft((current) => ({ ...current, goal: value }))}
+              options={[
+                { label: 'Lose', value: 'lose' as const },
+                { label: 'Maintain', value: 'maintain' as const },
+                { label: 'Gain', value: 'gain' as const },
+              ]}
             />
-            <ChoiceChip
-              label="Light"
-              active={activityLevel === 'light'}
-              onPress={() => setActivityLevel('light')}
-            />
-            <ChoiceChip
-              label="Moderate"
-              active={activityLevel === 'moderate'}
-              onPress={() => setActivityLevel('moderate')}
-            />
-            <ChoiceChip
-              label="Very active"
-              active={activityLevel === 'very'}
-              onPress={() => setActivityLevel('very')}
-            />
-            <ChoiceChip
-              label="Athlete"
-              active={activityLevel === 'athlete'}
-              onPress={() => setActivityLevel('athlete')}
-            />
-          </ChoiceWrap>
 
-          <FieldLabel label="Eating moments per day" />
-          <ChoiceWrap>
-            <ChoiceChip
-              label="3 meals"
-              active={mealsPerDay === 3}
-              onPress={() => setMealsPerDay(3)}
+            <FieldGroup>
+              <Text style={styles.groupLabel}>Activity level</Text>
+              <InlineFieldHint>
+                Choose the rhythm that best matches a normal week, not your best day.
+              </InlineFieldHint>
+              <View style={styles.choiceWrap}>
+                {(
+                  [
+                    ['sedentary', 'Sedentary'],
+                    ['light', 'Light'],
+                    ['moderate', 'Moderate'],
+                    ['very', 'Very active'],
+                    ['athlete', 'Athlete'],
+                  ] as Array<[ActivityLevel, string]>
+                ).map(([value, label]) => (
+                  <ChoiceChip
+                    key={value}
+                    label={label}
+                    active={draft.activityLevel === value}
+                    onPress={() => setDraft((current) => ({ ...current, activityLevel: value }))}
+                    accessibilityLabel={`Activity level ${label}`}
+                  />
+                ))}
+              </View>
+            </FieldGroup>
+
+            <SegmentedControl
+              label="Eating moments per day"
+              value={draft.mealsPerDay}
+              onChange={(value) => setDraft((current) => ({ ...current, mealsPerDay: value }))}
+              options={[
+                { label: '3 meals', value: 3 as const },
+                { label: '4 meals', value: 4 as const },
+              ]}
             />
-            <ChoiceChip
-              label="4 meals"
-              active={mealsPerDay === 4}
-              onPress={() => setMealsPerDay(4)}
+
+            <SegmentedControl
+              label="Cooking rhythm"
+              value={draft.cookingTimePreference}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, cookingTimePreference: value }))
+              }
+              options={[
+                { label: 'Quick', value: 'quick' as const },
+                { label: 'Balanced', value: 'balanced' as const },
+                { label: 'Flexible', value: 'flexible' as const },
+              ]}
             />
-          </ChoiceWrap>
+          </ScreenCard>
+        ) : null}
 
-          <FieldLabel label="Cooking rhythm" />
-          <ChoiceWrap>
-            <ChoiceChip
-              label="Quick"
-              active={cookingTimePreference === 'quick'}
-              onPress={() => setCookingTimePreference('quick')}
+        {step === 3 ? (
+          <ScreenCard>
+            <SectionTitle
+              eyebrow="Food rules"
+              title="Constraints and taste"
+              subtitle="Hard rules are enforced during generation and validation. Taste preferences help the week feel personal."
             />
-            <ChoiceChip
-              label="Balanced"
-              active={cookingTimePreference === 'balanced'}
-              onPress={() => setCookingTimePreference('balanced')}
+
+            <ChipInput
+              label="Allergies"
+              values={draft.allergies}
+              onChange={(nextValue) => setDraft((current) => ({ ...current, allergies: nextValue }))}
+              placeholder="Peanut, shellfish"
+              hint="Use one item at a time or paste a comma-separated list."
             />
-            <ChoiceChip
-              label="Flexible"
-              active={cookingTimePreference === 'flexible'}
-              onPress={() => setCookingTimePreference('flexible')}
+
+            <ChipInput
+              label="Forbidden foods"
+              values={draft.forbiddenFoods}
+              onChange={(nextValue) =>
+                setDraft((current) => ({ ...current, forbiddenFoods: nextValue }))
+              }
+              placeholder="Pork, alcohol"
             />
-          </ChoiceWrap>
-        </ScreenCard>
 
-        <ScreenCard>
-          <SectionTitle
-            eyebrow="Step 3"
-            title="Constraints and taste"
-            subtitle="Comma-separated lists are enough. Allergies, forbidden foods, and dislikes are treated as hard rules."
-          />
+            <ChipInput
+              label="Disliked foods"
+              values={draft.dislikedFoods}
+              onChange={(nextValue) =>
+                setDraft((current) => ({ ...current, dislikedFoods: nextValue }))
+              }
+              placeholder="Mushrooms, olives"
+            />
 
-          <FieldLabel label="Allergies" />
-          <AppTextInput
-            value={allergies}
-            onChangeText={setAllergies}
-            placeholder="Peanut, shellfish"
-          />
+            <ChipInput
+              label="Preferred cuisines or food styles"
+              values={draft.preferredCuisines}
+              onChange={(nextValue) =>
+                setDraft((current) => ({ ...current, preferredCuisines: nextValue }))
+              }
+              placeholder="Mediterranean, high-protein bowls"
+              hint="These are soft preferences, so the planner uses them as guidance rather than hard exclusions."
+            />
+          </ScreenCard>
+        ) : null}
 
-          <FieldLabel label="Forbidden foods" />
-          <AppTextInput
-            value={forbiddenFoods}
-            onChangeText={setForbiddenFoods}
-            placeholder="Pork, alcohol"
-          />
+        {step === 4 ? (
+          <>
+            <ScreenCard tone="accent">
+              <SectionTitle
+                eyebrow="Preview"
+                title="What this profile will generate"
+                subtitle="This is a live preview from your current answers."
+              />
 
-          <FieldLabel label="Disliked foods" />
-          <AppTextInput
-            value={dislikedFoods}
-            onChangeText={setDislikedFoods}
-            placeholder="Mushrooms, olives"
-          />
+              {previewTargets ? (
+                <>
+                  <View style={styles.metricRow}>
+                    <MetricTile
+                      label="Calories target"
+                      value={`${Math.round(previewTargets.calories)} kcal`}
+                      tone="accent"
+                    />
+                    <MetricTile
+                      label="Protein floor"
+                      value={`${Math.round(previewTargets.proteinFloorGrams)} g`}
+                      tone="accent"
+                    />
+                  </View>
+                  <View style={styles.metricRow}>
+                    <MetricTile label="Meals/day" value={String(draft.mealsPerDay)} />
+                    <MetricTile label="Cooking" value={draft.cookingTimePreference} />
+                  </View>
+                </>
+              ) : (
+                <InfoBanner
+                  message="Complete the required body inputs before the planner can show an accurate preview."
+                  tone="warm"
+                />
+              )}
+            </ScreenCard>
 
-          <FieldLabel label="Preferred cuisines or food style" />
-          <AppTextInput
-            value={preferredCuisines}
-            onChangeText={setPreferredCuisines}
-            placeholder="Mediterranean, warm bowls, high-protein"
-          />
-        </ScreenCard>
+            <ScreenCard>
+              <SectionTitle
+                eyebrow="Review"
+                title="Hard rules and taste summary"
+                subtitle="Take one last glance at the exclusions before you generate the week."
+              />
 
-        <ScreenCard tone="accent" style={styles.ctaCard}>
-          <View style={styles.ctaCopy}>
-            <Text style={styles.ctaTitle}>Ready to generate your first week?</Text>
-            <Text style={styles.ctaText}>
-              We&apos;ll build {mealsPerDay} eating moments per day around your {goal} goal and keep the hard food rules intact.
-            </Text>
-          </View>
+              <SummaryRow label="Allergies" value={formatList(draft.allergies)} />
+              <SummaryRow label="Forbidden foods" value={formatList(draft.forbiddenFoods)} />
+              <SummaryRow label="Disliked foods" value={formatList(draft.dislikedFoods)} />
+              <SummaryRow
+                label="Preferred cuisines"
+                value={formatList(draft.preferredCuisines, 'No taste preference saved')}
+              />
+            </ScreenCard>
+          </>
+        ) : null}
+      </ScrollView>
+
+      <StickyActionBar>
+        {step > 1 ? (
+          <SecondaryButton label="Back" onPress={previousStep} disabled={busy} />
+        ) : (
+          <SecondaryButton label="Cancel" onPress={() => router.back()} disabled={busy} />
+        )}
+        {step < 4 ? (
           <PrimaryButton
-            label={busy ? 'Building your week...' : 'Create profile and generate week'}
+            label="Continue"
+            onPress={nextStep}
+            disabled={stepErrors[step].length > 0 || busy}
+          />
+        ) : (
+          <PrimaryButton
+            label={
+              operations.generating || operations.savingProfile
+                ? 'Building your week...'
+                : profile
+                  ? 'Save profile and regenerate week'
+                  : 'Create profile and generate week'
+            }
             onPress={submit}
-            disabled={busy}
+            disabled={!previewProfile || stepErrors[4].length > 0 || busy}
             tone="warm"
           />
-        </ScreenCard>
-      </ScrollView>
+        )}
+      </StickyActionBar>
     </SafeAreaView>
   );
 }
 
-function ChoiceWrap({ children }: { children: React.ReactNode }) {
-  return <View style={styles.choiceWrap}>{children}</View>;
+function FieldGroup({ children }: { children: React.ReactNode }) {
+  return <View style={styles.fieldGroup}>{children}</View>;
+}
+
+function LabeledInput({
+  label,
+  hint,
+  style,
+  ...props
+}: React.ComponentProps<typeof AppTextInput> & {
+  label: string;
+  hint?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.fieldGroup, style]}>
+      <Text style={styles.groupLabel}>{label}</Text>
+      {hint ? <InlineFieldHint>{hint}</InlineFieldHint> : null}
+      <AppTextInput {...props} />
+    </View>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -358,14 +636,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
   },
+  loadingWrap: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  loadingText: {
+    color: colors.inkSoft,
+    fontSize: 16,
+  },
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xxl + 24,
+    paddingBottom: 140,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  progressSegment: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 999,
+    flex: 1,
+    height: 8,
+  },
+  progressSegmentActive: {
+    backgroundColor: colors.accentDeep,
   },
   heroPills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  fieldGroup: {
     gap: spacing.sm,
   },
   inputRow: {
@@ -374,28 +678,32 @@ const styles = StyleSheet.create({
   },
   inputColumn: {
     flex: 1,
-    gap: spacing.sm,
   },
   choiceWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  ctaCard: {
-    gap: spacing.md,
+  groupLabel: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    fontWeight: '700',
   },
-  ctaCopy: {
+  metricRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  summaryRow: {
     gap: 6,
   },
-  ctaTitle: {
-    color: colors.accentDeep,
-    fontFamily: 'Georgia',
-    fontSize: 24,
-    lineHeight: 29,
+  summaryLabel: {
+    color: colors.inkMuted,
+    fontSize: 13,
+    fontWeight: '700',
   },
-  ctaText: {
-    color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21,
+  summaryValue: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
   },
 });

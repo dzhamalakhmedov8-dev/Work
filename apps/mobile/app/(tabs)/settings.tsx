@@ -17,26 +17,34 @@ import { colors, spacing } from '../../theme';
 export default function SettingsScreen() {
   const {
     apiBaseUrl,
-    busy,
     currentPlan,
     error,
     exportBackupFile,
     importBackupFile,
     installationId,
+    operations,
     resetAllData,
+    showToast,
     updateApiBaseUrl,
     validateCurrentPlan,
   } = useAppStore();
   const [draftApiUrl, setDraftApiUrl] = useState(apiBaseUrl);
+  const [validationMessage, setValidationMessage] = useState<{
+    message: string;
+    tone: 'success' | 'warm' | 'danger';
+  } | null>(null);
 
   const saveApiUrl = async () => {
     await updateApiBaseUrl(draftApiUrl);
-    Alert.alert('Saved', 'The API base URL was updated for future plan requests.');
+    showToast('API base URL updated for future requests.', 'success');
   };
 
   const validate = async () => {
     if (!currentPlan) {
-      Alert.alert('Nothing to validate', 'Generate a weekly plan first.');
+      setValidationMessage({
+        message: 'Generate a weekly plan first, then run validation here.',
+        tone: 'warm',
+      });
       return;
     }
 
@@ -45,36 +53,38 @@ export default function SettingsScreen() {
       return;
     }
 
-    Alert.alert(
-      validation.isValid ? 'Plan validated' : 'Validation issues found',
-      validation.isValid
+    setValidationMessage({
+      message: validation.isValid
         ? 'The current weekly plan is within the app tolerances.'
-        : validation.errors.slice(0, 3).join('\n'),
-    );
+        : [...validation.errors, ...validation.warnings].slice(0, 3).join('\n'),
+      tone: validation.isValid ? 'success' : validation.errors.length > 0 ? 'danger' : 'warm',
+    });
   };
 
   const exportBackup = async () => {
     const fileUri = await exportBackupFile();
     if (fileUri) {
-      Alert.alert('Backup ready', fileUri);
+      showToast('Backup exported and ready to share.', 'success');
     }
   };
 
   const importBackup = async () => {
     const imported = await importBackupFile();
     if (imported) {
-      Alert.alert('Import complete', 'Profile, current plan, and history were restored locally.');
+      showToast('Backup imported into local storage.', 'success');
     }
   };
 
   const reset = async () => {
-    Alert.alert('Reset all local data', 'This will remove the profile, weekly plan, and history from this device.', [
+    Alert.alert('Reset all local data', 'This will remove the profile, weekly plan, history, and shopping checklist from this device.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
         style: 'destructive',
         onPress: () => {
-          void resetAllData();
+          void resetAllData().then(() => {
+            showToast('Local planner data was reset on this device.', 'success');
+          });
         },
       },
     ]);
@@ -85,57 +95,85 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <HeroPanel
           eyebrow="Settings"
-          title="Backup, validate, and control how this app connects."
-          subtitle="Published web builds use the built-in API automatically. Override it only when you intentionally want to point the app somewhere else."
-          tone="muted"
+          title="Backups, validation, and device-level controls."
+          subtitle="Everything here is local-first. Use this screen to validate the active week, move data between devices, or debug a development build."
+          tone="base"
         />
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
-
-        <ScreenCard>
-          <SectionTitle
-            eyebrow="Connection"
-            title="API base URL"
-            subtitle="Leave the hosted app on its default value. Use a LAN URL only for local testing."
-          />
-          <AppTextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={draftApiUrl}
-            onChangeText={setDraftApiUrl}
-            placeholder="https://your-api.example.com"
-          />
-          <PrimaryButton label="Save API URL" onPress={saveApiUrl} disabled={busy} />
-        </ScreenCard>
-
-        <ScreenCard tone="muted">
-          <SectionTitle
-            eyebrow="Device"
-            title="Installation identity"
-            subtitle="Useful when debugging or comparing exports between devices."
-          />
-          <Text style={styles.mono}>{installationId}</Text>
-        </ScreenCard>
+        {validationMessage ? (
+          <InfoBanner message={validationMessage.message} tone={validationMessage.tone} />
+        ) : null}
 
         <ScreenCard>
           <SectionTitle
             eyebrow="Maintenance"
             title="Plan checks and backup"
-            subtitle="Export and import keep the app local-first, while validation double-checks the current plan."
+            subtitle="Validation double-checks the active week, while export and import keep the app portable."
           />
-          <SecondaryButton label="Validate current plan" onPress={validate} disabled={busy} />
-          <SecondaryButton label="Export JSON backup" onPress={exportBackup} disabled={busy} />
-          <SecondaryButton label="Import JSON backup" onPress={importBackup} disabled={busy} />
+          <SecondaryButton
+            label={operations.validating ? 'Validating...' : 'Validate current plan'}
+            onPress={validate}
+            disabled={operations.validating}
+          />
+          <SecondaryButton
+            label={operations.exporting ? 'Exporting...' : 'Export JSON backup'}
+            onPress={exportBackup}
+            disabled={operations.exporting}
+          />
+          <SecondaryButton
+            label={operations.importing ? 'Importing...' : 'Import JSON backup'}
+            onPress={importBackup}
+            disabled={operations.importing}
+          />
         </ScreenCard>
 
         <ScreenCard tone="warm">
           <SectionTitle
             eyebrow="Danger zone"
-            title="Reset local data"
-            subtitle="This removes the stored profile, the active weekly plan, and local history from the current device."
+            title="Reset local planner data"
+            subtitle="This clears the stored profile, active plan, plan history, and shopping checklist from this device."
           />
-          <PrimaryButton label="Reset local data" onPress={reset} disabled={busy} tone="warm" />
+          <PrimaryButton
+            label={operations.resetting ? 'Resetting...' : 'Reset local data'}
+            onPress={reset}
+            disabled={operations.resetting}
+            tone="warm"
+          />
         </ScreenCard>
+
+        {__DEV__ ? (
+          <>
+            <ScreenCard tone="base">
+              <SectionTitle
+                eyebrow="Development"
+                title="API base URL"
+                subtitle="Published web builds use the built-in API automatically. Override this only when you intentionally want to point the app elsewhere."
+              />
+              <AppTextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={draftApiUrl}
+                onChangeText={setDraftApiUrl}
+                placeholder="https://your-api.example.com"
+              />
+              <PrimaryButton
+                label={operations.updatingApiUrl ? 'Saving...' : 'Save API URL'}
+                onPress={saveApiUrl}
+                disabled={operations.updatingApiUrl}
+              />
+            </ScreenCard>
+
+            <ScreenCard tone="base">
+              <SectionTitle
+                eyebrow="Device"
+                title="Installation identity"
+                subtitle="Useful when debugging or comparing backups between devices."
+              />
+              <Text style={styles.mono}>{installationId}</Text>
+            </ScreenCard>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -149,7 +187,7 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
-    paddingBottom: spacing.xxl + 52,
+    paddingBottom: spacing.xxl + 36,
   },
   mono: {
     color: colors.ink,

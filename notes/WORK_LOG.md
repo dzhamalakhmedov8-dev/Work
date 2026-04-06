@@ -129,6 +129,32 @@
   - `https://nutrition-planner-mobile.vercel.app/day/test-day`
   - `https://nutrition-planner-mobile.vercel.app/meal/test-meal`
   - `https://nutrition-planner-mobile.vercel.app/api/health`
+- Implemented the next-stage mobile UX recovery refactor:
+  - rebuilt the shared mobile UI primitives around simpler semantic surfaces
+  - added reusable segmented controls, chip inputs, collapsible sections, sticky action bars, snackbars, and validation status cards
+  - introduced operation-specific loading state in the mobile app store while keeping a derived global busy flag
+  - added local shopping checklist persistence keyed by plan id + ingredient id
+- Reworked onboarding into a four-step mobile wizard:
+  - body inputs
+  - planning rules
+  - constraints and taste
+  - live review before generation
+- Updated navigation and screen priorities for mobile:
+  - removed `Settings` from the visible tab bar while keeping the `/settings` route
+  - moved settings access under profile
+  - tightened the bottom navigation style
+- Rebuilt the main user-facing screens for faster phone scanning:
+  - `Week` now focuses on status, actions, and compact day cards
+  - `Shopping` now supports local check states and category progress
+  - `Profile` now deep-links back into onboarding steps for editing
+  - `Day` and `Meal` now keep primary actions in sticky bottom bars
+  - `Meal` uses collapsible ingredient and steps sections
+  - `Replan` modal now uses clearer scope and reason wording
+- Replaced most success/info alerts with inline feedback or snackbars.
+- Verified after the UX recovery refactor:
+  - `npm run typecheck`
+  - `npm run vercel-build`
+  - `npm test`
 
 ## Next Update Rule
 
