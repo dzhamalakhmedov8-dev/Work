@@ -27,7 +27,7 @@ npm run dev:mobile
 
 ## Supabase and tokens
 
-The project now supports optional Supabase-backed API persistence.
+The project supports optional Supabase-backed API persistence and an optional external LLM planner.
 
 1. Copy `.env.example` to `.env`
 2. Fill in:
@@ -36,6 +36,11 @@ The project now supports optional Supabase-backed API persistence.
    - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `NUTRITION_ENABLE_LLM`
+   - `OPENAI_API_KEY`
+   - `OPENAI_MODEL`
+   - `OPENAI_BASE_URL`
+   - optionally `OPENAI_REFERER` and `OPENAI_APP_NAME` when using OpenRouter
 3. Start the local Supabase stack and inspect the generated local keys:
 
 ```powershell
@@ -54,13 +59,20 @@ Notes:
 - the mobile app reads the public Supabase values through Expo config
 - Supabase Auth now uses the same public project URL and anon key for email/password login
 - the API uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to upsert planner snapshots and event logs
+- the planner API can call an OpenAI-compatible chat endpoint for weekly template selection when `NUTRITION_ENABLE_LLM=1`
+- the deterministic planner remains the source of truth for calories, grams, shopping lists, validation, and fallback recovery
+- OpenRouter keys work out of the box through the OpenAI-compatible API; the default example model is `openrouter/auto`
 - if the server-side Supabase keys are missing, the planner API still works and simply skips remote persistence
-- on Vercel, set all four values before deploying a public synced build:
+- on Vercel, set the Supabase values plus the LLM values before deploying a public synced build:
   - `EXPO_PUBLIC_SUPABASE_URL`
   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
-- the hosted Vercel project currently has no Supabase environment variables configured yet, so production still runs in graceful local-first mode until those values are added
+  - `NUTRITION_ENABLE_LLM`
+  - `OPENAI_API_KEY`
+  - `OPENAI_MODEL`
+  - `OPENAI_BASE_URL`
+- production health now reports both Supabase and LLM runtime status at `/api/health`
 
 Example Vercel commands on Windows:
 

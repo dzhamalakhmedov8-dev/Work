@@ -18,6 +18,17 @@ import { recipeViolations, validateWeeklyPlan } from './validation';
 
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'long' });
 
+export interface DayTemplateSelection {
+  breakfast: string;
+  lunch: string;
+  dinner: string;
+  snack?: string;
+}
+
+export interface WeeklyTemplateSelection {
+  days: DayTemplateSelection[];
+}
+
 const createId = (prefix: string): string =>
   `${prefix}-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 
@@ -33,7 +44,7 @@ const getDayLabel = (startDate: Date, dayIndex: number): string => {
   return weekdayFormatter.format(value);
 };
 
-const slotOrderFor = (mealsPerDay: 3 | 4): MealSlotType[] =>
+export const slotOrderFor = (mealsPerDay: 3 | 4): MealSlotType[] =>
   mealsPerDay === 3
     ? ['breakfast', 'lunch', 'dinner']
     : ['breakfast', 'lunch', 'snack', 'dinner'];
@@ -63,6 +74,9 @@ const cookingPreferenceScore = (
 
 const createRecipePreview = (template: MealTemplate): MealRecipe =>
   materializeTemplate(template, calculateTemplateNutrition(template).calories, `${template.id}-preview`);
+
+export const getMealTemplateById = (templateId: string): MealTemplate | undefined =>
+  mealTemplates.find((template) => template.id === templateId);
 
 const findCandidates = (
   slotType: MealSlotType,
@@ -99,6 +113,12 @@ const findCandidates = (
     .sort((left, right) => right.score - left.score)
     .map((entry) => entry.template);
 };
+
+export const getMealTemplateCandidates = (
+  slotType: MealSlotType,
+  profile: UserProfile,
+  request?: ReplanRequest,
+): MealTemplate[] => findCandidates(slotType, profile, [], request);
 
 const materializeTemplate = (
   template: MealTemplate,
@@ -292,6 +312,97 @@ export const generateWeeklyPlan = (
   const days = Array.from({ length: 7 }, (_, dayIndex) =>
     generateDayPlan(profile, dayIndex, recentlyUsedTemplateIds),
   );
+  const draftPlan: WeeklyPlan = {
+    id: createId('week'),
+    version: appPlanVersion,
+    profileId: profile.id,
+    createdAt,
+    updatedAt: createdAt,
+    targets,
+    days,
+    shoppingList: {
+      generatedAt: createdAt,
+      items: [],
+    },
+    validation: {
+      isValid: false,
+      errors: [],
+      warnings: [],
+      dayResults: [],
+    },
+    source,
+    replanHistory: [],
+  };
+
+  draftPlan.validation = validateWeeklyPlan(profile, draftPlan);
+  draftPlan.shoppingList = buildShoppingList(draftPlan);
+
+  return draftPlan;
+};
+
+export const generateWeeklyPlanFromTemplateSelection = (
+  profile: UserProfile,
+  selection: WeeklyTemplateSelection,
+  source: PlanSource = 'llm',
+): WeeklyPlan => {
+  if (selection.days.length !== 7) {
+    throw new Error('Weekly template selection must contain exactly 7 days');
+  }
+
+  const targets = calculateNutritionTargets(profile);
+  const slots = slotOrderFor(profile.mealsPerDay);
+  const slotDistribution = profile.mealsPerDay === 3 ? slotRatios[3] : slotRatios[4];
+  const createdAt = new Date().toISOString();
+  const days = selection.days.map((daySelection, dayIndex) => {
+    const meals: MealSlot[] = [];
+    let usedCalories = 0;
+
+    for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
+      const slotType = slots[slotIndex];
+      const isLastSlot = slotIndex === slots.length - 1;
+      const nominalTarget =
+        targets.calories * slotDistribution[slotType as keyof typeof slotDistribution];
+      const remainingCalories = Math.max(targets.calories - usedCalories, nominalTarget);
+      const targetCalories = isLastSlot
+        ? clamp(remainingCalories, nominalTarget * 0.8, nominalTarget * 1.25)
+        : nominalTarget;
+      const selectedTemplateId = daySelection[slotType];
+
+      if (!selectedTemplateId) {
+        throw new Error(`Missing ${slotType} template for day ${dayIndex}`);
+      }
+
+      const template = getMealTemplateById(selectedTemplateId);
+
+      if (!template) {
+        throw new Error(`Unknown template selected for ${slotType}: ${selectedTemplateId}`);
+      }
+
+      if (template.slotType !== slotType) {
+        throw new Error(
+          `Template ${selectedTemplateId} cannot be used for ${slotType} (expected ${template.slotType})`,
+        );
+      }
+
+      const violations = recipeViolations(createRecipePreview(template), profile.dietaryConstraints);
+
+      if (violations.length > 0) {
+        throw new Error(violations[0]);
+      }
+
+      meals.push(createMealSlot(template, slotType, dayIndex, targetCalories));
+      usedCalories += meals[meals.length - 1].recipe.nutrition.calories;
+    }
+
+    return enrichDayWithProteinIfNeeded(profile, {
+      id: createId(`day-${dayIndex}`),
+      dayIndex,
+      label: getDayLabel(startOfToday(), dayIndex),
+      meals,
+      totals: recomputeDayTotals(meals),
+    });
+  });
+
   const draftPlan: WeeklyPlan = {
     id: createId('week'),
     version: appPlanVersion,

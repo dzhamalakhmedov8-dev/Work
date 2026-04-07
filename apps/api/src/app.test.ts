@@ -34,6 +34,7 @@ describe('nutrition planner api', () => {
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
     expect(typeof response.body.supabase?.configured).toBe('boolean');
+    expect(typeof response.body.llm?.enabled).toBe('boolean');
   });
 
   it('generates a valid weekly plan', async () => {

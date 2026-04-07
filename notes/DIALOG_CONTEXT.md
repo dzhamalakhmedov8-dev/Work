@@ -186,3 +186,7 @@ This file preserves the stable context of the current collaboration so we do not
 - Preserve conversation context in Markdown files going forward.
 - Avoid mixing unrelated local files into git commits when deploying.
 - Keep the app optimized for mobile users first, even when the web export is used for sharing.
+- The external planner API is now expected to use an OpenAI-compatible provider, and the current live key is an OpenRouter key.
+- When LLM planning is enabled, the model should select from the internal meal template catalog only:
+  - deterministic nutrition math, shopping list generation, and validation remain the source of truth
+  - invalid or malformed LLM output must gracefully fall back to the template planner

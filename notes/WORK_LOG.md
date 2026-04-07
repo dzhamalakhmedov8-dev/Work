@@ -219,3 +219,25 @@
   - password sign-in works
   - sign-out works
   - sign-up works and currently requires email confirmation
+- Wired the external LLM planner path in the API:
+  - added a shared helper to materialize a weekly plan from selected template ids
+  - added OpenAI-compatible runtime config with automatic OpenRouter detection
+  - implemented strict JSON parsing for 7-day template selections
+  - kept deterministic validation and template fallback as the safety net
+- Added API-side tests for:
+  - successful LLM plan generation
+  - graceful fallback on malformed LLM output
+- Updated docs and `.env.example` with optional LLM variables:
+  - `NUTRITION_ENABLE_LLM`
+  - `OPENAI_API_KEY`
+  - `OPENAI_MODEL`
+  - `OPENAI_BASE_URL`
+  - `OPENAI_REFERER`
+  - `OPENAI_APP_NAME`
+- Added LLM runtime status to `/health`.
+- Added local and Vercel environment variables for the external planner API.
+- Verified local live LLM generation:
+  - `/health` reports provider `openrouter`
+  - `generate` returned `source: llm`
+  - `fallbackUsed: false`
+  - persistence to Supabase still worked

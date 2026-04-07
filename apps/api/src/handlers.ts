@@ -4,7 +4,12 @@ import {
   validatePlanInputSchema,
 } from '../../../packages/shared/src';
 
-import { generatePlanWithStrategy, replanWithStrategy, validatePlanInput } from './plan-service';
+import {
+  generatePlanWithStrategy,
+  getLlmStatus,
+  replanWithStrategy,
+  validatePlanInput,
+} from './plan-service';
 import { getSupabaseStatus, persistPlannerSnapshot } from './supabase';
 
 type RequestContext = {
@@ -16,6 +21,7 @@ export const getHealthPayload = () => ({
   service: '@nutrition-planner/api',
   now: new Date().toISOString(),
   supabase: getSupabaseStatus(),
+  llm: getLlmStatus(),
 });
 
 export const handleGeneratePlanRequest = async (
@@ -45,6 +51,7 @@ export const handleGeneratePlanRequest = async (
     meta: {
       source: result.source,
       fallbackUsed: result.fallbackUsed,
+      llm: result.llm,
       persistence,
     },
   };
