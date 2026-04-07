@@ -12,6 +12,7 @@ import {
   SectionTitle,
   SegmentedControl,
   SecondaryButton,
+  SocialButton,
 } from '../components/ui';
 import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
@@ -21,7 +22,8 @@ type AuthMode = 'sign-in' | 'sign-up';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen() {
-  const { configured, error, operations, clearError, signIn, signUp } = useAuthStore();
+  const { configured, error, operations, clearError, signIn, signUp, signInWithOAuth } =
+    useAuthStore();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,7 +97,7 @@ export default function AuthScreen() {
         <HeroPanel
           eyebrow="Account"
           title="Sign in before you build and sync your nutrition week."
-          subtitle="Supabase Auth keeps one planner workspace tied to one account, while the app still stores the active week locally for fast access."
+          subtitle="Continue with Google, Apple, or email. Supabase Auth keeps one planner workspace tied to one account, while the app still stores the active week locally for fast access."
           tone="accent"
         />
 
@@ -111,9 +113,47 @@ export default function AuthScreen() {
 
         <ScreenCard>
           <SectionTitle
-            eyebrow="Welcome"
+            eyebrow="Fastest way"
+            title="Continue with social sign-in"
+            subtitle="Use your existing Google or Apple account and return straight to your planner."
+          />
+
+          <View style={styles.socialGroup}>
+            <SocialButton
+              label={
+                operations.socialProvider === 'google'
+                  ? 'Opening Google...'
+                  : 'Continue with Google'
+              }
+              provider="google"
+              onPress={() => signInWithOAuth('google')}
+              disabled={!configured || Boolean(operations.socialProvider)}
+              accessibilityLabel="Continue with Google"
+            />
+            <SocialButton
+              label={
+                operations.socialProvider === 'apple'
+                  ? 'Opening Apple...'
+                  : 'Continue with Apple'
+              }
+              provider="apple"
+              onPress={() => signInWithOAuth('apple')}
+              disabled={!configured || Boolean(operations.socialProvider)}
+              accessibilityLabel="Continue with Apple"
+            />
+          </View>
+
+          <InlineFieldHint>
+            Google and Apple must be enabled for this Supabase project before these buttons can
+            complete the sign-in.
+          </InlineFieldHint>
+        </ScreenCard>
+
+        <ScreenCard>
+          <SectionTitle
+            eyebrow="Fallback"
             title="Email and password"
-            subtitle="Use an existing account or create a new one for this planner workspace."
+            subtitle="Use an existing account or create a new one if you prefer password-based access."
           />
 
           <SegmentedControl
@@ -153,7 +193,7 @@ export default function AuthScreen() {
               placeholder="At least 6 characters"
             />
             <InlineFieldHint>
-              Password auth is the fastest path for this build. Social login can come later.
+              Email and password stays available as a backup if social sign-in is not configured yet.
             </InlineFieldHint>
           </View>
 
@@ -212,6 +252,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl + 36,
   },
   fieldGroup: {
+    gap: spacing.sm,
+  },
+  socialGroup: {
     gap: spacing.sm,
   },
   label: {

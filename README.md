@@ -58,6 +58,7 @@ Notes:
 
 - the mobile app reads the public Supabase values through Expo config
 - Supabase Auth now uses the same public project URL and anon key for email/password login
+- Google and Apple social sign-in now use the same Supabase Auth project through OAuth redirects
 - the API uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to upsert planner snapshots and event logs
 - the planner API can call an OpenAI-compatible chat endpoint for weekly template selection when `NUTRITION_ENABLE_LLM=1`
 - the deterministic planner remains the source of truth for calories, grams, shopping lists, validation, and fallback recovery
@@ -73,6 +74,9 @@ Notes:
   - `OPENAI_MODEL`
   - `OPENAI_BASE_URL`
 - production health now reports both Supabase and LLM runtime status at `/api/health`
+- to use Google and Apple sign-in in a real build, also enable both providers in Supabase Auth and add redirect URLs that match this app:
+  - `nutrition-planner://**`
+  - `https://nutrition-planner-mobile.vercel.app/**`
 
 Example Vercel commands on Windows:
 

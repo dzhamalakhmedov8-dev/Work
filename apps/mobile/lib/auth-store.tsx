@@ -1,12 +1,22 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import * as Linking from 'expo-linking';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as WebBrowser from 'expo-web-browser';
 import type { Session, User } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 import { supabase, supabasePublicConfig } from './supabase';
+
+WebBrowser.maybeCompleteAuthSession();
+
+export type OAuthProvider = 'google' | 'apple';
 
 type AuthOperationState = {
   signingIn: boolean;
   signingUp: boolean;
   signingOut: boolean;
+  socialProvider: OAuthProvider | null;
 };
 
 type AuthActionResult = {
@@ -22,6 +32,7 @@ type AuthStoreValue = {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<AuthActionResult>;
+  signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
 };
@@ -30,11 +41,13 @@ const defaultOperations: AuthOperationState = {
   signingIn: false,
   signingUp: false,
   signingOut: false,
+  socialProvider: null,
 };
 
 const AuthStoreContext = createContext<AuthStoreValue | null>(null);
 
 export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
+  const incomingUrl = Linking.useURL();
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -90,6 +103,50 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!supabase || Platform.OS === 'web' || !incomingUrl) {
+      return;
+    }
+
+    const supabaseClient = supabase;
+
+    const createSessionFromUrl = async (url: string) => {
+      const { params, errorCode } = QueryParams.getQueryParams(url);
+
+      if (errorCode) {
+        throw new Error(errorCode);
+      }
+
+      const accessToken =
+        typeof params.access_token === 'string' ? params.access_token : null;
+      const refreshToken =
+        typeof params.refresh_token === 'string' ? params.refresh_token : null;
+
+      if (!accessToken || !refreshToken) {
+        return;
+      }
+
+      const { data, error: nextError } = await supabaseClient.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (nextError) {
+        throw nextError;
+      }
+
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+      setReady(true);
+    };
+
+    void createSessionFromUrl(incomingUrl).catch((nextError: unknown) => {
+      setError(
+        nextError instanceof Error ? nextError.message : 'Failed to finish social sign-in.',
+      );
+    });
+  }, [incomingUrl]);
 
   const setOperation = (key: keyof AuthOperationState, value: boolean) => {
     setOperations((current) => ({
@@ -166,6 +223,107 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInWithOAuth = async (provider: OAuthProvider) => {
+    if (!supabase) {
+      throw new Error('Supabase Auth is not configured for this build.');
+    }
+
+    setOperations((current) => ({
+      ...current,
+      socialProvider: provider,
+    }));
+    setError(null);
+
+    const redirectTo = makeRedirectUri({
+      path: 'auth',
+      scheme: 'nutrition-planner',
+    });
+
+    try {
+      if (Platform.OS === 'web') {
+        const { error: nextError } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+          },
+        });
+
+        if (nextError) {
+          throw nextError;
+        }
+
+        return;
+      }
+
+      const { data, error: nextError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (nextError) {
+        throw nextError;
+      }
+
+      if (!data?.url) {
+        throw new Error(`No ${provider} auth URL was returned by Supabase.`);
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+      if (result.type === 'success') {
+        const { params, errorCode } = QueryParams.getQueryParams(result.url);
+
+        if (errorCode) {
+          throw new Error(errorCode);
+        }
+
+        const accessToken =
+          typeof params.access_token === 'string' ? params.access_token : null;
+        const refreshToken =
+          typeof params.refresh_token === 'string' ? params.refresh_token : null;
+
+        if (!accessToken || !refreshToken) {
+          throw new Error(`${provider} sign-in completed without a session token.`);
+        }
+
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        setSession(sessionData.session);
+        setUser(sessionData.session?.user ?? null);
+        return;
+      }
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        return;
+      }
+
+      throw new Error(`${provider} sign-in could not be completed.`);
+    } catch (nextError) {
+      const providerLabel = provider === 'google' ? 'Google' : 'Apple';
+      const message =
+        nextError instanceof Error
+          ? nextError.message
+          : `Failed to sign in with ${providerLabel}.`;
+      setError(message);
+      throw nextError;
+    } finally {
+      setOperations((current) => ({
+        ...current,
+        socialProvider: null,
+      }));
+    }
+  };
+
   const signOut = async () => {
     if (!supabase) {
       return;
@@ -203,6 +361,7 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
       error,
       signIn,
       signUp,
+      signInWithOAuth,
       signOut,
       clearError,
     }),

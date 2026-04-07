@@ -243,3 +243,10 @@
   - persistence to Supabase still worked
 - Fixed a production activation edge case where `NUTRITION_ENABLE_LLM` could arrive from Vercel with a trailing newline:
   - the feature flag now uses `trim()` before checking for `'1'`
+- Added Google and Apple social auth support to the mobile auth layer:
+  - OAuth buttons now appear above the email/password form
+  - Supabase OAuth is used for both providers
+  - web uses the browser redirect flow
+  - native uses Expo auth-session plus deep-link recovery back into the app
+- Added the Expo web-browser plugin and `expo-auth-session` dependency for the OAuth flow.
+- Updated the README with the required Supabase redirect URLs for social sign-in.

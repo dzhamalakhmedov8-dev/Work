@@ -47,7 +47,15 @@ const config: ExpoConfig = {
     output: 'static',
     favicon: './assets/images/favicon.png',
   },
-  plugins: ['expo-router'],
+  plugins: [
+    'expo-router',
+    [
+      'expo-web-browser',
+      {
+        experimentalLauncherActivity: false,
+      },
+    ],
+  ],
   experiments: {
     typedRoutes: true,
   },

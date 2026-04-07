@@ -190,3 +190,7 @@ This file preserves the stable context of the current collaboration so we do not
 - When LLM planning is enabled, the model should select from the internal meal template catalog only:
   - deterministic nutrition math, shopping list generation, and validation remain the source of truth
   - invalid or malformed LLM output must gracefully fall back to the template planner
+- The auth screen now needs to support three entry paths:
+  - Google OAuth
+  - Apple OAuth
+  - email/password fallback

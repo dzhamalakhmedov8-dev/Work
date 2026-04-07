@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AntDesign } from '@expo/vector-icons';
 import {
   Pressable,
   StyleSheet,
@@ -161,6 +162,54 @@ export function SecondaryButton({
       ]}
     >
       <Text style={styles.secondaryButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export function SocialButton({
+  label,
+  provider,
+  onPress,
+  disabled,
+  accessibilityLabel,
+}: ButtonProps & { provider: 'google' | 'apple' }) {
+  const isApple = provider === 'apple';
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityRole="button"
+      onPress={() => {
+        void onPress();
+      }}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.socialButton,
+        isApple ? styles.socialButtonApple : null,
+        disabled ? styles.buttonDisabled : null,
+        pressed && !disabled ? styles.buttonPressed : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.socialButtonIconWrap,
+          isApple ? styles.socialButtonIconWrapApple : null,
+        ]}
+      >
+        <AntDesign
+          color={isApple ? colors.white : colors.ink}
+          name={isApple ? 'apple' : 'google'}
+          size={18}
+        />
+      </View>
+      <Text
+        style={[
+          styles.socialButtonText,
+          isApple ? styles.socialButtonTextApple : null,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -727,6 +776,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
   },
+  socialButton: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.borderStrong,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+  },
+  socialButtonApple: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  socialButtonIconWrap: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 999,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  socialButtonIconWrapApple: {
+    backgroundColor: '#2f3d35',
+  },
   smallButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceRaised,
@@ -757,6 +834,14 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: '700',
+  },
+  socialButtonText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  socialButtonTextApple: {
+    color: colors.white,
   },
   smallButtonText: {
     color: colors.ink,
