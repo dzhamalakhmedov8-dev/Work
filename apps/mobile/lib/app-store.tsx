@@ -21,7 +21,8 @@ import {
   shouldUpgradeStoredApiUrl,
   validatePlan,
 } from './api';
-import { clearStore, readJson, removeKey, writeJson } from './database';
+import { readJson, removeKey, writeJson } from './database';
+import { useAuthStore } from './auth-store';
 
 type AppSettings = {
   apiBaseUrl: string;
@@ -154,7 +155,10 @@ const safeParseShoppingChecks = (value: unknown): Record<string, boolean> => {
 const buildShoppingCheckKey = (planId: string, ingredientId: string): string =>
   `${planId}:${ingredientId}`;
 
+const scopedDataKey = (baseKey: string, userId: string): string => `user:${userId}:${baseKey}`;
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
+  const { ready: authReady, user } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [operations, setOperations] = useState<AppOperationState>(defaultOperations);
   const [error, setError] = useState<string | null>(null);
@@ -165,27 +169,86 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [currentPlan, setCurrentPlan] = useState<WeeklyPlan | null>(null);
   const [planHistory, setPlanHistory] = useState<WeeklyPlan[]>([]);
   const [shoppingChecks, setShoppingChecks] = useState<Record<string, boolean>>({});
+  const activeUserId = user?.id ?? null;
 
   useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
+    setReady(false);
     const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
     const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
-    const storedProfile = safeParseProfile(readJson<UserProfile>(profileKey));
-    const storedCurrentPlan = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
-    const storedPlanHistory = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
-    const storedShoppingChecks = safeParseShoppingChecks(
-      readJson<Record<string, boolean>>(shoppingChecksKey),
-    );
 
     writeJson(installationIdKey, storedInstallationId);
     writeJson(settingsKey, storedSettings);
     setInstallationId(storedInstallationId);
     setApiBaseUrl(storedSettings.apiBaseUrl);
+
+    if (!activeUserId) {
+      setProfile(null);
+      setCurrentPlan(null);
+      setPlanHistory([]);
+      setShoppingChecks({});
+      setError(null);
+      setReady(true);
+      return;
+    }
+
+    const scopedProfileKey = scopedDataKey(profileKey, activeUserId);
+    const scopedCurrentPlanKey = scopedDataKey(currentPlanKey, activeUserId);
+    const scopedPlanHistoryKey = scopedDataKey(planHistoryKey, activeUserId);
+    const scopedShoppingChecksKey = scopedDataKey(shoppingChecksKey, activeUserId);
+
+    const rawScopedProfile = readJson<UserProfile>(scopedProfileKey);
+    const rawScopedCurrentPlan = readJson<WeeklyPlan>(scopedCurrentPlanKey);
+    const rawScopedPlanHistory = readJson<WeeklyPlan[]>(scopedPlanHistoryKey);
+    const rawScopedShoppingChecks = readJson<Record<string, boolean>>(scopedShoppingChecksKey);
+
+    const profileFallback = safeParseProfile(readJson<UserProfile>(profileKey));
+    const currentPlanFallback = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
+    const planHistoryFallback = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
+    const shoppingChecksFallback = safeParseShoppingChecks(
+      readJson<Record<string, boolean>>(shoppingChecksKey),
+    );
+
+    const storedProfile = safeParseProfile(rawScopedProfile) ?? profileFallback;
+    const storedCurrentPlan = safeParsePlan(rawScopedCurrentPlan) ?? currentPlanFallback;
+    const storedPlanHistory =
+      rawScopedPlanHistory !== null
+        ? safeParsePlanHistory(rawScopedPlanHistory)
+        : planHistoryFallback;
+    const storedShoppingChecks =
+      rawScopedShoppingChecks !== null
+        ? safeParseShoppingChecks(rawScopedShoppingChecks)
+        : shoppingChecksFallback;
+
+    if (storedProfile && !readJson<UserProfile>(scopedProfileKey)) {
+      writeJson(scopedProfileKey, storedProfile);
+    }
+
+    if (storedCurrentPlan && !readJson<WeeklyPlan>(scopedCurrentPlanKey)) {
+      writeJson(scopedCurrentPlanKey, storedCurrentPlan);
+    }
+
+    if (storedPlanHistory.length > 0 && !readJson<WeeklyPlan[]>(scopedPlanHistoryKey)) {
+      writeJson(scopedPlanHistoryKey, storedPlanHistory);
+    }
+
+    if (
+      Object.keys(storedShoppingChecks).length > 0 &&
+      !readJson<Record<string, boolean>>(scopedShoppingChecksKey)
+    ) {
+      writeJson(scopedShoppingChecksKey, storedShoppingChecks);
+    }
+
     setProfile(storedProfile);
     setCurrentPlan(storedCurrentPlan);
     setPlanHistory(storedPlanHistory);
     setShoppingChecks(storedShoppingChecks);
+    setError(null);
     setReady(true);
-  }, []);
+  }, [activeUserId, authReady]);
 
   const busy = useMemo(() => Object.values(operations).some(Boolean), [operations]);
 
@@ -213,11 +276,16 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const saveProfile = async (nextProfile: UserProfile) => {
+    if (!activeUserId) {
+      setError('Sign in to save a profile on this device.');
+      return;
+    }
+
     setOperation('savingProfile', true);
     setError(null);
 
     try {
-      writeJson(profileKey, nextProfile);
+      writeJson(scopedDataKey(profileKey, activeUserId), nextProfile);
       setProfile(nextProfile);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to save profile');
@@ -228,6 +296,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const generateWeek = async (profileOverride?: UserProfile) => {
+    if (!activeUserId) {
+      setError('Sign in to generate a weekly plan.');
+      return;
+    }
+
     const effectiveProfile = profileOverride ?? profile;
 
     if (!effectiveProfile) {
@@ -242,8 +315,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       const plan = await generatePlan(apiBaseUrl, effectiveProfile, installationId);
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson(currentPlanKey, plan);
-      writeJson(planHistoryKey, nextHistory);
+      writeJson(scopedDataKey(currentPlanKey, activeUserId), plan);
+      writeJson(scopedDataKey(planHistoryKey, activeUserId), nextHistory);
       setCurrentPlan(plan);
       setPlanHistory(nextHistory);
     } catch (nextError) {
@@ -259,6 +332,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const replanCurrentPlan = async (request: ReplanRequest) => {
+    if (!activeUserId) {
+      setError('Sign in to update the weekly plan.');
+      return;
+    }
+
     if (!profile || !currentPlan) {
       setError('You need an active profile and weekly plan before replanning.');
       return;
@@ -279,8 +357,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson(currentPlanKey, plan);
-      writeJson(planHistoryKey, nextHistory);
+      writeJson(scopedDataKey(currentPlanKey, activeUserId), plan);
+      writeJson(scopedDataKey(planHistoryKey, activeUserId), nextHistory);
       setCurrentPlan(plan);
       setPlanHistory(nextHistory);
     } catch (nextError) {
@@ -296,6 +374,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const validateCurrentPlan = async (): Promise<PlanValidation | null> => {
+    if (!activeUserId) {
+      setError('Sign in to validate the current plan.');
+      return null;
+    }
+
     if (!profile || !currentPlan) {
       return null;
     }
@@ -317,7 +400,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         validation,
       };
 
-      writeJson(currentPlanKey, nextPlan);
+      writeJson(scopedDataKey(currentPlanKey, activeUserId), nextPlan);
       setCurrentPlan(nextPlan);
       return validation;
     } catch (nextError) {
@@ -384,6 +467,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const importBackupFile = async (): Promise<boolean> => {
+    if (!activeUserId) {
+      setError('Sign in to import a backup into your planner profile.');
+      return false;
+    }
+
     setOperation('importing', true);
     setError(null);
 
@@ -403,20 +491,23 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       });
       const bundle = exportBundleV1Schema.parse(JSON.parse(fileContent));
       const nextSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
+      const scopedProfileKey = scopedDataKey(profileKey, activeUserId);
+      const scopedCurrentPlanKey = scopedDataKey(currentPlanKey, activeUserId);
+      const scopedPlanHistoryKey = scopedDataKey(planHistoryKey, activeUserId);
 
       if (bundle.profile) {
-        writeJson(profileKey, bundle.profile);
+        writeJson(scopedProfileKey, bundle.profile);
       } else {
-        removeKey(profileKey);
+        removeKey(scopedProfileKey);
       }
 
       if (bundle.currentPlan) {
-        writeJson(currentPlanKey, bundle.currentPlan);
+        writeJson(scopedCurrentPlanKey, bundle.currentPlan);
       } else {
-        removeKey(currentPlanKey);
+        removeKey(scopedCurrentPlanKey);
       }
 
-      writeJson(planHistoryKey, bundle.planHistory);
+      writeJson(scopedPlanHistoryKey, bundle.planHistory);
       writeJson(settingsKey, nextSettings);
       setProfile(bundle.profile);
       setCurrentPlan(bundle.currentPlan);
@@ -437,7 +528,19 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const resetAllData = async () => {
     setOperation('resetting', true);
     try {
-      clearStore();
+      if (activeUserId) {
+        removeKey(scopedDataKey(profileKey, activeUserId));
+        removeKey(scopedDataKey(currentPlanKey, activeUserId));
+        removeKey(scopedDataKey(planHistoryKey, activeUserId));
+        removeKey(scopedDataKey(shoppingChecksKey, activeUserId));
+      }
+
+      removeKey(profileKey);
+      removeKey(currentPlanKey);
+      removeKey(planHistoryKey);
+      removeKey(shoppingChecksKey);
+      removeKey(installationIdKey);
+      removeKey(settingsKey);
       const nextInstallationId = createInstallationId();
 
       writeJson(installationIdKey, nextInstallationId);
@@ -466,7 +569,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleShoppingItem = (ingredientId: string) => {
-    if (!currentPlan) {
+    if (!currentPlan || !activeUserId) {
       return;
     }
 
@@ -477,7 +580,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         ...current,
         [itemKey]: !current[itemKey],
       };
-      writeJson(shoppingChecksKey, nextState);
+      writeJson(scopedDataKey(shoppingChecksKey, activeUserId), nextState);
       return nextState;
     });
   };

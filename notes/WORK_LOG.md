@@ -206,3 +206,16 @@
 - Verified production generate requests still fail to persist because the hosted schema has not been applied yet:
   - missing table `public.planner_installations`
 - Attempted to push the migration through Supabase CLI, but remote Postgres connectivity from this environment is blocked/times out on the direct host; this leaves one remaining manual or alternative migration step.
+- After applying the SQL manually in Supabase SQL Editor, verified both local and production planner generate requests now persist successfully.
+- Verified local `generate`, `replan`, and `validate` all create Supabase event rows for the same installation id.
+- Added Supabase Auth to the mobile app:
+  - session restore and auth state subscription
+  - email/password sign-in and sign-up screen
+  - sign-out actions in profile and settings
+  - route gating so unauthenticated users land on `/auth`
+  - user-scoped local planner storage keys
+- Updated reset behavior so app data reset no longer risks wiping the web auth session.
+- Verified auth flows directly against Supabase:
+  - password sign-in works
+  - sign-out works
+  - sign-up works and currently requires email confirmation

@@ -1,21 +1,45 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Snackbar } from '../components/ui';
 import { AppStoreProvider, useAppStore } from '../lib/app-store';
+import { AuthStoreProvider, useAuthStore } from '../lib/auth-store';
 import { colors, radii } from '../theme';
 
 export default function RootLayout() {
   return (
-    <AppStoreProvider>
-      <AppShell />
-    </AppStoreProvider>
+    <AuthStoreProvider>
+      <AppStoreProvider>
+        <AppShell />
+      </AppStoreProvider>
+    </AuthStoreProvider>
   );
 }
 
 function AppShell() {
-  const { clearToast, toast } = useAppStore();
+  const segments = useSegments();
+  const { clearToast, ready, profile, toast } = useAppStore();
+  const { configured, ready: authReady, session } = useAuthStore();
+  const inAuthFlow = String(segments[0] ?? '') === 'auth';
+
+  if (!authReady || !ready) {
+    return (
+      <View style={styles.loadingShell}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={styles.loadingTitle}>Preparing your nutrition workspace...</Text>
+      </View>
+    );
+  }
+
+  if (configured && !session && !inAuthFlow) {
+    return <Redirect href={'/auth' as never} />;
+  }
+
+  if (configured && session && inAuthFlow) {
+    return <Redirect href={profile ? '/(tabs)/profile' : '/onboarding'} />;
+  }
 
   return (
     <View style={styles.shell}>
@@ -34,6 +58,7 @@ function AppShell() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
@@ -74,5 +99,19 @@ const styles = StyleSheet.create({
   shell: {
     backgroundColor: colors.background,
     flex: 1,
+  },
+  loadingShell: {
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    flex: 1,
+    gap: 12,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingTitle: {
+    color: colors.inkSoft,
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: 'center',
   },
 });

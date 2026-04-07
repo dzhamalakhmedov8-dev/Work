@@ -13,11 +13,13 @@ import {
   SectionTitle,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
+import { useAuthStore } from '../../lib/auth-store';
 import { getSupabasePublicConfigStatus } from '../../lib/supabase';
 import { colors, spacing } from '../../theme';
 
 export default function SettingsScreen() {
   const supabasePublicConfig = getSupabasePublicConfigStatus();
+  const { operations: authOperations, signOut, user } = useAuthStore();
   const {
     apiBaseUrl,
     currentPlan,
@@ -107,6 +109,19 @@ export default function SettingsScreen() {
         {validationMessage ? (
           <InfoBanner message={validationMessage.message} tone={validationMessage.tone} />
         ) : null}
+
+        <ScreenCard>
+          <SectionTitle
+            eyebrow="Account"
+            title={user?.email ?? 'Signed-in account'}
+            subtitle="Supabase Auth controls who can open this planner workspace on the device."
+          />
+          <SecondaryButton
+            label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}
+            onPress={() => signOut()}
+            disabled={authOperations.signingOut}
+          />
+        </ScreenCard>
 
         <ScreenCard>
           <SectionTitle

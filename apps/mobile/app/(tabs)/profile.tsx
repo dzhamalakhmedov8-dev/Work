@@ -15,6 +15,7 @@ import {
   ValidationStatusCard,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
+import { useAuthStore } from '../../lib/auth-store';
 import {
   formatActivityLevel,
   formatGoal,
@@ -26,6 +27,7 @@ import { colors, spacing } from '../../theme';
 
 export default function ProfileScreen() {
   const { currentPlan, generateWeek, operations, profile } = useAppStore();
+  const { operations: authOperations, signOut, user } = useAuthStore();
 
   if (!profile) {
     return (
@@ -64,6 +66,21 @@ export default function ProfileScreen() {
         </HeroPanel>
 
         {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
+
+        <ScreenCard tone="base">
+          <SectionTitle
+            eyebrow="Account"
+            title={user?.email ?? 'Signed-in account'}
+            subtitle="This profile and planner state now live behind Supabase Auth on this device."
+          />
+          <View style={styles.actionStack}>
+            <SecondaryButton
+              label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}
+              onPress={() => signOut()}
+              disabled={authOperations.signingOut}
+            />
+          </View>
+        </ScreenCard>
 
         <ScreenCard>
           <SectionTitle

@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 type SupabasePublicConfig = {
   url: string | null;
@@ -37,7 +39,9 @@ export const supabase = supabasePublicConfig.configured
       auth: {
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: Platform.OS === 'web',
+        storage: Platform.OS === 'web' ? undefined : AsyncStorage,
+        storageKey: 'nutrition-planner-auth',
       },
     })
   : null;

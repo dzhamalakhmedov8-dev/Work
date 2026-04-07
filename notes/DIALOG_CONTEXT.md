@@ -59,13 +59,14 @@ This file preserves the stable context of the current collaboration so we do not
   - shared domain: `packages/shared/src/`
   - API: `apps/api/src/`
   - mobile app: `apps/mobile/`
-- Current verification status:
+  - Current verification status:
   - root tests pass
   - root typecheck passes
   - mobile typecheck passes
   - Expo web launch was verified locally
   - Vercel production deployment succeeds from the monorepo root
   - Supabase integration code builds and tests pass without requiring keys; when keys are missing it degrades gracefully and skips remote persistence
+  - Supabase Auth is now wired into the client with email/password sign-in, sign-up, sign-out, and session restore
 - Main launch commands:
   - API: `npm run dev:api`
   - Mobile: `npm run dev:mobile`
@@ -109,10 +110,11 @@ This file preserves the stable context of the current collaboration so we do not
     - local root `.env` is now configured with hosted Supabase URL plus public and service-role keys
     - Vercel production now has the required Supabase env vars configured
     - local and production API health both report Supabase as configured
-    - remote schema is still missing on the hosted project because CLI migration push could not reach the remote Postgres host from this environment
-    - current persistence failure reason is:
-      - missing table `public.planner_installations`
-- Mobile UI direction:
+    - hosted schema was applied manually through Supabase SQL Editor
+    - local and production generate requests now persist successfully
+    - local `generate`, `replan`, and `validate` have all been verified to log events in Supabase
+    - Supabase Auth currently uses email/password and sign-up requires email confirmation
+  - Mobile UI direction:
   - The app is being shaped as a mobile-first product rather than an internal dashboard
   - The active visual language is warm editorial nutrition planning:
     - sand backgrounds

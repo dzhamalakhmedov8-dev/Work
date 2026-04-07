@@ -3,12 +3,14 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Pill } from '../components/ui';
 import { useAppStore } from '../lib/app-store';
+import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
 
 export default function IndexScreen() {
   const { ready, profile } = useAppStore();
+  const { configured, ready: authReady, session } = useAuthStore();
 
-  if (!ready) {
+  if (!authReady || !ready) {
     return (
       <View style={styles.container}>
         <Pill label="Nutrition Planner" tone="accent" />
@@ -19,6 +21,10 @@ export default function IndexScreen() {
         </Text>
       </View>
     );
+  }
+
+  if (configured && !session) {
+    return <Redirect href={'/auth' as never} />;
   }
 
   if (!profile) {

@@ -9,6 +9,7 @@ Mobile-first nutrition planner built with Expo, React Native, TypeScript, and a 
 - supports meal, day, and week replanning
 - builds a consolidated shopping list
 - stores profile and plans locally
+- supports Supabase Auth with email and password
 - supports JSON backup export and import
 
 ## Workspace layout
@@ -51,6 +52,7 @@ npm run supabase:db:push
 Notes:
 
 - the mobile app reads the public Supabase values through Expo config
+- Supabase Auth now uses the same public project URL and anon key for email/password login
 - the API uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to upsert planner snapshots and event logs
 - if the server-side Supabase keys are missing, the planner API still works and simply skips remote persistence
 - on Vercel, set all four values before deploying a public synced build:
@@ -79,5 +81,6 @@ npm run typecheck
 ## Notes
 
 - v1 is local-first and single-profile
+- auth is now account-based, but planner state still stays device-local for fast reads
 - the product is positioned as a lifestyle and fitness tool, not a medical app
 - the web build uses browser storage, while native targets use SQLite
