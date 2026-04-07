@@ -77,7 +77,7 @@ describe('generatePlanWithStrategy', () => {
   beforeEach(() => {
     process.env = {
       ...originalEnv,
-      NUTRITION_ENABLE_LLM: '1',
+      NUTRITION_ENABLE_LLM: "1\n",
       OPENAI_API_KEY: 'sk-or-test-key',
       OPENAI_MODEL: 'openrouter/auto',
       OPENAI_BASE_URL: 'https://openrouter.ai/api/v1',

@@ -65,7 +65,7 @@ const getLlmRuntime = (): LlmRuntime => {
   const baseUrl = process.env.OPENAI_BASE_URL?.trim() || getDefaultBaseUrl(provider);
 
   return {
-    enabled: process.env.NUTRITION_ENABLE_LLM === '1' && Boolean(apiKey),
+    enabled: process.env.NUTRITION_ENABLE_LLM?.trim() === '1' && Boolean(apiKey),
     provider,
     baseUrl,
     model,

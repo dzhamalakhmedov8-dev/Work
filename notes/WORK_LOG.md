@@ -241,3 +241,5 @@
   - `generate` returned `source: llm`
   - `fallbackUsed: false`
   - persistence to Supabase still worked
+- Fixed a production activation edge case where `NUTRITION_ENABLE_LLM` could arrive from Vercel with a trailing newline:
+  - the feature flag now uses `trim()` before checking for `'1'`
