@@ -186,3 +186,23 @@
   - `npm run vercel-build`
 - Checked the linked Vercel project environment and confirmed that no Supabase environment variables are configured there yet.
 - Checked Supabase CLI access and found that the CLI is not logged into a hosted Supabase account in this environment.
+- Retrieved the hosted Supabase API keys for project `rbsamgvfepzzakhlqdkj` via access token and linked the local `supabase/` directory to that project.
+- Added a local root `.env` with the hosted Supabase URL, anon key, and service-role key.
+- Updated local env loading so the root `.env` is picked up by both:
+  - `apps/api/src/server.ts`
+  - `apps/mobile/app.config.ts`
+- Verified local API health now reports Supabase as configured.
+- Added Supabase environment variables in Vercel for:
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- Committed and pushed the repo-side Supabase integration:
+  - commit `c73c31e` `connect supabase persistence`
+- Forced a fresh Vercel production deployment from the current tree:
+  - deployment URL `https://nutrition-planner-mobile-qaptm1ukm.vercel.app`
+  - production alias updated at `https://nutrition-planner-mobile.vercel.app`
+- Verified production `/api/health` now reports Supabase as configured.
+- Verified production generate requests still fail to persist because the hosted schema has not been applied yet:
+  - missing table `public.planner_installations`
+- Attempted to push the migration through Supabase CLI, but remote Postgres connectivity from this environment is blocked/times out on the direct host; this leaves one remaining manual or alternative migration step.

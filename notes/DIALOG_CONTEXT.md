@@ -72,7 +72,7 @@ This file preserves the stable context of the current collaboration so we do not
   - Tests: `npm test`
   - Typecheck: `npm run typecheck`
   - Vercel build: `npm run vercel-build`
-- Deployment state:
+  - Deployment state:
   - Vercel project name:
     - `nutrition-planner-mobile`
   - GitHub repo is connected to the Vercel project
@@ -90,6 +90,8 @@ This file preserves the stable context of the current collaboration so we do not
     - `/meal/<id>`
   - Public health endpoint:
     - `https://nutrition-planner-mobile.vercel.app/api/health`
+  - Latest direct production deployment URL:
+    - `https://nutrition-planner-mobile-qaptm1ukm.vercel.app`
   - The hosted web app no longer depends on `127.0.0.1:4000` by default
 - Current Vercel routing strategy:
     - `cleanUrls: true`
@@ -104,8 +106,12 @@ This file preserves the stable context of the current collaboration so we do not
       - `SUPABASE_SERVICE_ROLE_KEY`
     - API persistence is keyed by `X-Installation-Id`
     - Supabase schema lives under `supabase/migrations/`
-    - current linked Vercel project has no Supabase env vars configured yet
-    - current machine is not logged into a hosted Supabase account through the CLI
+    - local root `.env` is now configured with hosted Supabase URL plus public and service-role keys
+    - Vercel production now has the required Supabase env vars configured
+    - local and production API health both report Supabase as configured
+    - remote schema is still missing on the hosted project because CLI migration push could not reach the remote Postgres host from this environment
+    - current persistence failure reason is:
+      - missing table `public.planner_installations`
 - Mobile UI direction:
   - The app is being shaped as a mobile-first product rather than an internal dashboard
   - The active visual language is warm editorial nutrition planning:
