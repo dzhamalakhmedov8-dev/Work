@@ -15,3 +15,6 @@ coverage/
 telegram-window.png
 telegram-window-after-send.png
 logs/
+.env
+.env.local
+.env.*.local

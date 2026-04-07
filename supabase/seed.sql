@@ -1,0 +1,2 @@
+-- Seed file intentionally left minimal.
+-- Add local development fixtures here if you want preloaded planner rows or auth test data.

@@ -159,3 +159,30 @@
 ## Next Update Rule
 
 - Add a new bullet here whenever an important task is completed or a meaningful finding changes future work.
+
+## 2026-04-07
+
+- Added optional Supabase integration scaffolding across the monorepo.
+- Added server-side Supabase persistence support in the API:
+  - snapshot upsert into `planner_installations`
+  - append-only event log into `planner_events`
+  - graceful fallback when Supabase env vars are missing
+- Updated API handlers and Express/Vercel routes to pass `X-Installation-Id` into persistence flows.
+- Added Supabase schema files under `supabase/`:
+  - migration for planner installations and planner events
+  - placeholder `seed.sql`
+- Added Expo public env support for:
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- Added a mobile-side Supabase client helper and surfaced public-config status in the dev settings screen.
+- Added `.env.example` and ignored local `.env` files in git.
+- Added root convenience scripts:
+  - `npm run supabase:start`
+  - `npm run supabase:status`
+  - `npm run supabase:db:push`
+- Verified after the Supabase/API wiring:
+  - `npm test`
+  - `npm run typecheck`
+  - `npm run vercel-build`
+- Checked the linked Vercel project environment and confirmed that no Supabase environment variables are configured there yet.
+- Checked Supabase CLI access and found that the CLI is not logged into a hosted Supabase account in this environment.

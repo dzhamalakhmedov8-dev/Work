@@ -28,12 +28,21 @@ const profile: UserProfile = {
 };
 
 describe('nutrition planner api', () => {
+  it('reports supabase status in health', async () => {
+    const response = await request(app).get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(typeof response.body.supabase?.configured).toBe('boolean');
+  });
+
   it('generates a valid weekly plan', async () => {
     const response = await request(app).post('/v1/plan/generate').send({ profile });
 
     expect(response.status).toBe(200);
     expect(response.body.plan.days).toHaveLength(7);
     expect(response.body.validation.isValid).toBe(true);
+    expect(typeof response.body.meta?.persistence?.configured).toBe('boolean');
   });
 
   it('replans a single meal and preserves the seven-day structure', async () => {

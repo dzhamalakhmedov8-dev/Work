@@ -6,15 +6,18 @@ import {
   AppTextInput,
   HeroPanel,
   InfoBanner,
+  Pill,
   PrimaryButton,
   ScreenCard,
   SecondaryButton,
   SectionTitle,
 } from '../../components/ui';
 import { useAppStore } from '../../lib/app-store';
+import { getSupabasePublicConfigStatus } from '../../lib/supabase';
 import { colors, spacing } from '../../theme';
 
 export default function SettingsScreen() {
+  const supabasePublicConfig = getSupabasePublicConfigStatus();
   const {
     apiBaseUrl,
     currentPlan,
@@ -172,6 +175,33 @@ export default function SettingsScreen() {
               />
               <Text style={styles.mono}>{installationId}</Text>
             </ScreenCard>
+
+            <ScreenCard tone="base">
+              <SectionTitle
+                eyebrow="Supabase"
+                title="Public client config"
+                subtitle="The mobile app reads these values from Expo public env variables. Server-side sync uses the API's private service-role token."
+              />
+              <View style={styles.statusRow}>
+                <Pill
+                  label={supabasePublicConfig.configured ? 'Public keys configured' : 'Public keys missing'}
+                  tone={supabasePublicConfig.configured ? 'success' : 'danger'}
+                />
+              </View>
+              <Text style={styles.configLabel}>Project URL</Text>
+              <Text style={styles.configValue}>
+                {supabasePublicConfig.url ?? 'Missing EXPO_PUBLIC_SUPABASE_URL'}
+              </Text>
+              <Text style={styles.configLabel}>Anon key</Text>
+              <Text style={styles.configValue}>
+                {supabasePublicConfig.anonKeyConfigured
+                  ? 'Configured via EXPO_PUBLIC_SUPABASE_ANON_KEY'
+                  : 'Missing EXPO_PUBLIC_SUPABASE_ANON_KEY'}
+              </Text>
+              <Text style={styles.helperText}>
+                For API-side persistence, also set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the server or Vercel environment.
+              </Text>
+            </ScreenCard>
           </>
         ) : null}
       </ScrollView>
@@ -194,5 +224,25 @@ const styles = StyleSheet.create({
     fontFamily: 'Courier',
     fontSize: 13,
     lineHeight: 19,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  configLabel: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  configValue: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  helperText: {
+    color: colors.inkMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

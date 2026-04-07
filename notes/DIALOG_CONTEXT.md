@@ -1,6 +1,6 @@
 # Dialog Context
 
-Last updated: 2026-04-06 (Europe/Moscow)
+Last updated: 2026-04-07 (Europe/Moscow)
 
 ## Purpose
 
@@ -39,6 +39,7 @@ This file preserves the stable context of the current collaboration so we do not
   - mobile app: Expo Router + React Native + TypeScript
   - local persistence: SQLite key-value store on device
   - API service: Express + TypeScript
+  - optional Supabase-backed API persistence for planner snapshots and event logs
   - shared package for schemas, generation, calculation, validation, and shopping aggregation
 - Core implemented capabilities:
   - onboarding for physical stats, goal, activity, meal count, exclusions, and cuisine preferences
@@ -53,6 +54,7 @@ This file preserves the stable context of the current collaboration so we do not
   - `POST /v1/plan/generate`
   - `POST /v1/plan/replan`
   - `POST /v1/plan/validate`
+  - `GET /health` now also reports Supabase configuration presence
 - Important package locations:
   - shared domain: `packages/shared/src/`
   - API: `apps/api/src/`
@@ -63,6 +65,7 @@ This file preserves the stable context of the current collaboration so we do not
   - mobile typecheck passes
   - Expo web launch was verified locally
   - Vercel production deployment succeeds from the monorepo root
+  - Supabase integration code builds and tests pass without requiring keys; when keys are missing it degrades gracefully and skips remote persistence
 - Main launch commands:
   - API: `npm run dev:api`
   - Mobile: `npm run dev:mobile`
@@ -88,10 +91,21 @@ This file preserves the stable context of the current collaboration so we do not
   - Public health endpoint:
     - `https://nutrition-planner-mobile.vercel.app/api/health`
   - The hosted web app no longer depends on `127.0.0.1:4000` by default
-  - Current Vercel routing strategy:
+- Current Vercel routing strategy:
     - `cleanUrls: true`
     - explicit rewrites for dynamic route placeholders under `/day/:dayIndex` and `/meal/:mealId`
     - catch-all SPA fallback to `/index.html` for unhandled app routes
+  - Supabase integration expectations:
+    - mobile public env keys:
+      - `EXPO_PUBLIC_SUPABASE_URL`
+      - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+    - API/private env keys:
+      - `SUPABASE_URL`
+      - `SUPABASE_SERVICE_ROLE_KEY`
+    - API persistence is keyed by `X-Installation-Id`
+    - Supabase schema lives under `supabase/migrations/`
+    - current linked Vercel project has no Supabase env vars configured yet
+    - current machine is not logged into a hosted Supabase account through the CLI
 - Mobile UI direction:
   - The app is being shaped as a mobile-first product rather than an internal dashboard
   - The active visual language is warm editorial nutrition planning:

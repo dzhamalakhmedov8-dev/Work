@@ -19,7 +19,11 @@ export const createApp = () => {
 
   app.post('/v1/plan/generate', async (request, response) => {
     try {
-      response.status(200).json(await handleGeneratePlanRequest(request.body));
+      response.status(200).json(
+        await handleGeneratePlanRequest(request.body, {
+          installationId: request.header('x-installation-id'),
+        }),
+      );
     } catch (error) {
       const formatted = formatError(error);
       response.status(formatted.status).json(formatted.body);
@@ -28,16 +32,24 @@ export const createApp = () => {
 
   app.post('/v1/plan/replan', async (request, response) => {
     try {
-      response.status(200).json(await handleReplanPlanRequest(request.body));
+      response.status(200).json(
+        await handleReplanPlanRequest(request.body, {
+          installationId: request.header('x-installation-id'),
+        }),
+      );
     } catch (error) {
       const formatted = formatError(error);
       response.status(formatted.status).json(formatted.body);
     }
   });
 
-  app.post('/v1/plan/validate', (request, response) => {
+  app.post('/v1/plan/validate', async (request, response) => {
     try {
-      response.status(200).json(handleValidatePlanRequest(request.body));
+      response.status(200).json(
+        await handleValidatePlanRequest(request.body, {
+          installationId: request.header('x-installation-id'),
+        }),
+      );
     } catch (error) {
       const formatted = formatError(error);
       response.status(formatted.status).json(formatted.body);

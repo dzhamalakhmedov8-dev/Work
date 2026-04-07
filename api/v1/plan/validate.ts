@@ -6,7 +6,11 @@ export const runtime = 'nodejs';
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null);
-    return jsonResponse(handleValidatePlanRequest(body));
+    return jsonResponse(
+      await handleValidatePlanRequest(body, {
+        installationId: request.headers.get('x-installation-id'),
+      }),
+    );
   } catch (error) {
     const formatted = formatError(error);
     return jsonResponse(formatted.body, formatted.status);

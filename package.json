@@ -10,8 +10,14 @@
   "scripts": {
     "dev:mobile": "npm run start --workspace @nutrition-planner/mobile",
     "dev:api": "npm run dev --workspace @nutrition-planner/api",
+    "supabase:start": "supabase start",
+    "supabase:db:push": "supabase db push",
+    "supabase:status": "supabase status -o env",
     "vercel-build": "npm run export:web --workspace @nutrition-planner/mobile",
     "test": "npm run test --workspace @nutrition-planner/shared && npm run test --workspace @nutrition-planner/api",
     "typecheck": "npm run typecheck --workspace @nutrition-planner/shared && npm run typecheck --workspace @nutrition-planner/api && npm run typecheck --workspace @nutrition-planner/mobile"
+  },
+  "devDependencies": {
+    "supabase": "^2.85.0"
   }
 }
