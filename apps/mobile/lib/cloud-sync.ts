@@ -16,7 +16,7 @@ export type CloudWorkspace = {
   hasAnyData: boolean;
 };
 
-type CloudWorkspaceSnapshot = {
+export type CloudWorkspaceSnapshot = {
   profile: UserProfile | null;
   currentPlan: WeeklyPlan | null;
   planHistory: WeeklyPlan[];
@@ -32,6 +32,13 @@ type CloudPlanRow = {
   isCurrent: boolean;
 };
 
+type ShoppingCheckRow = {
+  user_id: string;
+  plan_id: string;
+  ingredient_id: string;
+  checked: boolean;
+};
+
 const assertSupabase = () => {
   if (!supabase) {
     throw new Error('Supabase client is not configured for this build.');
@@ -40,19 +47,8 @@ const assertSupabase = () => {
   return supabase;
 };
 
-const parseShoppingChecks = (value: unknown): Record<string, boolean> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-
-  return Object.entries(value).reduce<Record<string, boolean>>((accumulator, [key, state]) => {
-    if (typeof state === 'boolean') {
-      accumulator[key] = state;
-    }
-
-    return accumulator;
-  }, {});
-};
+const buildShoppingCheckKey = (planId: string, ingredientId: string): string =>
+  `${planId}:${ingredientId}`;
 
 const dedupePlans = (plans: WeeklyPlan[]): WeeklyPlan[] => {
   const seen = new Set<string>();
@@ -107,16 +103,60 @@ const parseProfile = (value: unknown): UserProfile | null => {
   return parsed.success ? parsed.data : null;
 };
 
+const parseShoppingRows = (value: unknown): Record<string, boolean> => {
+  if (!Array.isArray(value)) {
+    return {};
+  }
+
+  return value.reduce<Record<string, boolean>>((accumulator, item) => {
+    if (!item || typeof item !== 'object') {
+      return accumulator;
+    }
+
+    const row = item as Partial<ShoppingCheckRow>;
+    if (
+      typeof row.plan_id === 'string' &&
+      typeof row.ingredient_id === 'string' &&
+      row.checked === true
+    ) {
+      accumulator[buildShoppingCheckKey(row.plan_id, row.ingredient_id)] = true;
+    }
+
+    return accumulator;
+  }, {});
+};
+
+const shoppingChecksToRows = (
+  shoppingChecks: Record<string, boolean>,
+): Array<{ plan_id: string; ingredient_id: string; checked: boolean }> =>
+  Object.entries(shoppingChecks).reduce<Array<{ plan_id: string; ingredient_id: string; checked: boolean }>>(
+    (rows, [compositeKey, checked]) => {
+      if (!checked) {
+        return rows;
+      }
+
+      const [planId, ingredientId] = compositeKey.split(':');
+      if (!planId || !ingredientId) {
+        return rows;
+      }
+
+      rows.push({
+        plan_id: planId,
+        ingredient_id: ingredientId,
+        checked: true,
+      });
+
+      return rows;
+    },
+    [],
+  );
+
 export const cloudSyncEnabled = (): boolean => Boolean(supabase);
 
 export const loadCloudWorkspace = async (userId: string): Promise<CloudWorkspace> => {
   const client = assertSupabase();
-  const [profileResult, plansResult, syncStateResult] = await Promise.all([
-    client
-      .from('user_profiles')
-      .select('user_id, profile')
-      .eq('user_id', userId)
-      .maybeSingle(),
+  const [profileResult, plansResult, syncStateResult, shoppingChecksResult] = await Promise.all([
+    client.from('user_profiles').select('user_id, profile').eq('user_id', userId).maybeSingle(),
     client
       .from('user_plans')
       .select('user_id, plan_id, plan, source, is_current, created_at')
@@ -125,9 +165,13 @@ export const loadCloudWorkspace = async (userId: string): Promise<CloudWorkspace
       .limit(20),
     client
       .from('user_sync_state')
-      .select('user_id, shopping_checks, last_installation_id')
+      .select('user_id, last_installation_id')
       .eq('user_id', userId)
       .maybeSingle(),
+    client
+      .from('user_shopping_checks')
+      .select('user_id, plan_id, ingredient_id, checked')
+      .eq('user_id', userId),
   ]);
 
   if (profileResult.error) {
@@ -142,16 +186,25 @@ export const loadCloudWorkspace = async (userId: string): Promise<CloudWorkspace
     throw new Error(syncStateResult.error.message);
   }
 
+  if (shoppingChecksResult.error) {
+    throw new Error(shoppingChecksResult.error.message);
+  }
+
   const profile = parseProfile(profileResult.data?.profile ?? null);
   const parsedPlanRows = parsePlanRows(plansResult.data ?? []);
   const currentPlan =
     parsedPlanRows.find((row) => row.isCurrent)?.plan ?? parsedPlanRows[0]?.plan ?? null;
   const planHistory = dedupePlans(
     currentPlan
-      ? [currentPlan, ...parsedPlanRows.map((row) => row.plan).filter((plan) => plan.id !== currentPlan.id)]
+      ? [
+          currentPlan,
+          ...parsedPlanRows
+            .map((row) => row.plan)
+            .filter((plan) => plan.id !== currentPlan.id),
+        ]
       : parsedPlanRows.map((row) => row.plan),
   ).slice(0, 12);
-  const shoppingChecks = parseShoppingChecks(syncStateResult.data?.shopping_checks);
+  const shoppingChecks = parseShoppingRows(shoppingChecksResult.data ?? []);
   const lastInstallationId =
     typeof syncStateResult.data?.last_installation_id === 'string'
       ? syncStateResult.data.last_installation_id
@@ -173,62 +226,10 @@ export const loadCloudWorkspace = async (userId: string): Promise<CloudWorkspace
   };
 };
 
-export const upsertCloudProfile = async (
-  userId: string,
-  profile: UserProfile,
-): Promise<void> => {
+export const upsertCloudProfile = async (profile: UserProfile): Promise<void> => {
   const client = assertSupabase();
-  const { error } = await client.from('user_profiles').upsert(
-    {
-      user_id: userId,
-      profile,
-    },
-    {
-      onConflict: 'user_id',
-    },
-  );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-};
-
-export const syncCloudPlans = async (
-  userId: string,
-  currentPlan: WeeklyPlan | null,
-  planHistory: WeeklyPlan[],
-): Promise<void> => {
-  const client = assertSupabase();
-  const plans = dedupePlans(
-    currentPlan
-      ? [currentPlan, ...planHistory.filter((plan) => plan.id !== currentPlan.id)]
-      : planHistory,
-  ).slice(0, 12);
-
-  const resetCurrentResult = await client
-    .from('user_plans')
-    .update({ is_current: false })
-    .eq('user_id', userId)
-    .eq('is_current', true);
-
-  if (resetCurrentResult.error) {
-    throw new Error(resetCurrentResult.error.message);
-  }
-
-  if (plans.length === 0) {
-    return;
-  }
-
-  const rows = plans.map((plan) => ({
-    user_id: userId,
-    plan_id: plan.id,
-    plan,
-    validation: plan.validation,
-    source: plan.source,
-    is_current: currentPlan ? plan.id === currentPlan.id : false,
-  }));
-  const { error } = await client.from('user_plans').upsert(rows, {
-    onConflict: 'user_id,plan_id',
+  const { error } = await client.rpc('upsert_user_profile', {
+    profile,
   });
 
   if (error) {
@@ -236,22 +237,67 @@ export const syncCloudPlans = async (
   }
 };
 
-export const saveCloudShoppingChecks = async (
-  userId: string,
+export const syncCloudPlans = async (
+  currentPlan: WeeklyPlan | null,
+  planHistory: WeeklyPlan[],
+): Promise<void> => {
+  const client = assertSupabase();
+
+  if (currentPlan) {
+    const replaceResult = await client.rpc('replace_user_current_plan', {
+      plan: currentPlan,
+      validation: currentPlan.validation,
+      source: currentPlan.source,
+    });
+
+    if (replaceResult.error) {
+      throw new Error(replaceResult.error.message);
+    }
+  }
+
+  const history = dedupePlans(
+    currentPlan
+      ? planHistory.filter((plan) => plan.id !== currentPlan.id)
+      : planHistory,
+  ).slice(0, 12);
+
+  const historyResult = await client.rpc('upsert_user_plan_history', {
+    plans: history,
+  });
+
+  if (historyResult.error) {
+    throw new Error(historyResult.error.message);
+  }
+};
+
+export const setCloudShoppingCheck = async (
+  planId: string,
+  ingredientId: string,
+  checked: boolean,
+  installationId: string,
+): Promise<void> => {
+  const client = assertSupabase();
+  const { error } = await client.rpc('set_user_shopping_check', {
+    plan_id: planId,
+    ingredient_id: ingredientId,
+    checked,
+    installation_id: installationId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
+export const replaceCloudShoppingChecks = async (
   shoppingChecks: Record<string, boolean>,
   installationId: string,
 ): Promise<void> => {
   const client = assertSupabase();
-  const { error } = await client.from('user_sync_state').upsert(
-    {
-      user_id: userId,
-      shopping_checks: shoppingChecks,
-      last_installation_id: installationId,
-    },
-    {
-      onConflict: 'user_id',
-    },
-  );
+  const { error } = await client.rpc('replace_user_shopping_checks', {
+    checks: shoppingChecksToRows(shoppingChecks),
+    installation_id: installationId,
+  });
 
   if (error) {
     throw new Error(error.message);
@@ -259,34 +305,21 @@ export const saveCloudShoppingChecks = async (
 };
 
 export const pushLocalWorkspaceToCloud = async (
-  userId: string,
   workspace: CloudWorkspaceSnapshot,
 ): Promise<void> => {
   if (workspace.profile) {
-    await upsertCloudProfile(userId, workspace.profile);
+    await upsertCloudProfile(workspace.profile);
   }
 
-  await syncCloudPlans(userId, workspace.currentPlan, workspace.planHistory);
-  await saveCloudShoppingChecks(userId, workspace.shoppingChecks, workspace.installationId);
+  await syncCloudPlans(workspace.currentPlan, workspace.planHistory);
+  await replaceCloudShoppingChecks(workspace.shoppingChecks, workspace.installationId);
 };
 
-export const deleteCloudWorkspace = async (userId: string): Promise<void> => {
+export const deleteCloudWorkspace = async (): Promise<void> => {
   const client = assertSupabase();
-  const [profileResult, plansResult, syncResult] = await Promise.all([
-    client.from('user_profiles').delete().eq('user_id', userId),
-    client.from('user_plans').delete().eq('user_id', userId),
-    client.from('user_sync_state').delete().eq('user_id', userId),
-  ]);
+  const { error } = await client.rpc('clear_user_workspace');
 
-  if (profileResult.error) {
-    throw new Error(profileResult.error.message);
-  }
-
-  if (plansResult.error) {
-    throw new Error(plansResult.error.message);
-  }
-
-  if (syncResult.error) {
-    throw new Error(syncResult.error.message);
+  if (error) {
+    throw new Error(error.message);
   }
 };

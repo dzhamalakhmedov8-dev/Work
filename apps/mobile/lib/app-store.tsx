@@ -19,7 +19,7 @@ import {
   deleteCloudWorkspace,
   loadCloudWorkspace,
   pushLocalWorkspaceToCloud,
-  saveCloudShoppingChecks,
+  setCloudShoppingCheck,
   syncCloudPlans,
   upsertCloudProfile,
 } from './cloud-sync';
@@ -31,6 +31,13 @@ import {
   validatePlan,
 } from './api';
 import { readJson, removeKey, writeJson } from './database';
+import {
+  mapBackupError,
+  mapPlannerError,
+  mapSyncError,
+  mapWorkspaceError,
+  type MappedClientError,
+} from './error-mapping';
 import { useAuthStore } from './auth-store';
 
 type AppSettings = {
@@ -58,6 +65,47 @@ type ToastState = {
   tone: 'neutral' | 'success' | 'danger';
 };
 
+type AccountStatusKind =
+  | 'local-only'
+  | 'syncing'
+  | 'synced'
+  | 'reconnect-required'
+  | 'sync-error';
+
+type AccountStatus = {
+  kind: AccountStatusKind;
+  title: string;
+  message: string;
+  tone: 'neutral' | 'success' | 'warm' | 'danger';
+};
+
+type LegacyWorkspaceSummary = {
+  profileName: string | null;
+  hasProfile: boolean;
+  hasCurrentPlan: boolean;
+  planHistoryCount: number;
+  checkedItems: number;
+};
+
+type BackupImportMode = 'local-only' | 'local-and-cloud';
+
+type BackupImportPreview = {
+  bundle: ExportBundleV1;
+  summary: {
+    hasProfile: boolean;
+    currentPlanTitle: string | null;
+    historyCount: number;
+  };
+};
+
+type LocalWorkspace = {
+  profile: UserProfile | null;
+  currentPlan: WeeklyPlan | null;
+  planHistory: WeeklyPlan[];
+  shoppingChecks: Record<string, boolean>;
+  hasAnyData: boolean;
+};
+
 type AppStoreValue = {
   ready: boolean;
   busy: boolean;
@@ -72,14 +120,21 @@ type AppStoreValue = {
   shoppingChecks: Record<string, boolean>;
   cloudSyncEnabled: boolean;
   lastCloudInstallationId: string | null;
+  readOnlyMode: boolean;
+  hasLegacyDeviceData: boolean;
+  legacyDeviceDataSummary: LegacyWorkspaceSummary | null;
+  accountStatus: AccountStatus;
   saveProfile: (profile: UserProfile) => Promise<void>;
   generateWeek: (profileOverride?: UserProfile) => Promise<void>;
   replanCurrentPlan: (request: ReplanRequest) => Promise<void>;
   validateCurrentPlan: () => Promise<PlanValidation | null>;
   updateApiBaseUrl: (nextUrl: string) => Promise<void>;
   exportBackupFile: () => Promise<string | null>;
-  importBackupFile: () => Promise<boolean>;
-  resetAllData: () => Promise<void>;
+  prepareBackupImport: () => Promise<BackupImportPreview | null>;
+  applyBackupImport: (bundle: ExportBundleV1, mode: BackupImportMode) => Promise<boolean>;
+  importLegacyDeviceData: (mode: BackupImportMode) => Promise<boolean>;
+  clearLocalDeviceData: () => Promise<void>;
+  clearCloudWorkspace: () => Promise<void>;
   toggleShoppingItem: (ingredientId: string) => void;
   isShoppingItemChecked: (ingredientId: string, planIdOverride?: string) => boolean;
   showToast: (message: string, tone?: ToastState['tone']) => void;
@@ -112,6 +167,7 @@ const profileKey = 'profile';
 const currentPlanKey = 'currentPlan';
 const planHistoryKey = 'planHistory';
 const shoppingChecksKey = 'shoppingChecks';
+const lastWorkspaceUserIdKey = 'lastWorkspaceUserId';
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
@@ -190,11 +246,87 @@ const writeOrRemoveJson = (key: string, value: unknown): void => {
   writeJson(key, value);
 };
 
+const readLocalWorkspace = (userId: string): LocalWorkspace => {
+  const localProfile = safeParseProfile(readJson<UserProfile>(scopedDataKey(profileKey, userId)));
+  const localCurrentPlan = safeParsePlan(
+    readJson<WeeklyPlan>(scopedDataKey(currentPlanKey, userId)),
+  );
+  const localPlanHistory = safeParsePlanHistory(
+    readJson<WeeklyPlan[]>(scopedDataKey(planHistoryKey, userId)),
+  );
+  const localShoppingChecks = safeParseShoppingChecks(
+    readJson<Record<string, boolean>>(scopedDataKey(shoppingChecksKey, userId)),
+  );
+
+  return {
+    profile: localProfile,
+    currentPlan: localCurrentPlan,
+    planHistory: localPlanHistory,
+    shoppingChecks: localShoppingChecks,
+    hasAnyData:
+      Boolean(localProfile) ||
+      Boolean(localCurrentPlan) ||
+      localPlanHistory.length > 0 ||
+      Object.keys(localShoppingChecks).length > 0,
+  };
+};
+
+const readLegacyWorkspace = (): LocalWorkspace => {
+  const legacyProfile = safeParseProfile(readJson<UserProfile>(profileKey));
+  const legacyCurrentPlan = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
+  const legacyPlanHistory = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
+  const legacyShoppingChecks = safeParseShoppingChecks(
+    readJson<Record<string, boolean>>(shoppingChecksKey),
+  );
+
+  return {
+    profile: legacyProfile,
+    currentPlan: legacyCurrentPlan,
+    planHistory: legacyPlanHistory,
+    shoppingChecks: legacyShoppingChecks,
+    hasAnyData:
+      Boolean(legacyProfile) ||
+      Boolean(legacyCurrentPlan) ||
+      legacyPlanHistory.length > 0 ||
+      Object.keys(legacyShoppingChecks).length > 0,
+  };
+};
+
+const clearLegacyWorkspace = () => {
+  removeKey(profileKey);
+  removeKey(currentPlanKey);
+  removeKey(planHistoryKey);
+  removeKey(shoppingChecksKey);
+};
+
+const summarizeLegacyWorkspace = (workspace: LocalWorkspace): LegacyWorkspaceSummary | null => {
+  if (!workspace.hasAnyData) {
+    return null;
+  }
+
+  return {
+    profileName: workspace.profile?.name ?? null,
+    hasProfile: Boolean(workspace.profile),
+    hasCurrentPlan: Boolean(workspace.currentPlan),
+    planHistoryCount: workspace.planHistory.length,
+    checkedItems: Object.values(workspace.shoppingChecks).filter(Boolean).length,
+  };
+};
+
+const summarizeBackupImport = (bundle: ExportBundleV1): BackupImportPreview['summary'] => ({
+  hasProfile: Boolean(bundle.profile),
+  currentPlanTitle: bundle.currentPlan?.days?.[0]?.meals?.[0]?.recipe.title ?? null,
+  historyCount: bundle.planHistory.length,
+});
+
+const reconnectMessage = 'Reconnect the account before editing or syncing this workspace.';
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const { ready: authReady, user } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [operations, setOperations] = useState<AppOperationState>(defaultOperations);
   const [error, setError] = useState<string | null>(null);
+  const [syncIssue, setSyncIssue] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [installationId, setInstallationId] = useState('');
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultSettings.apiBaseUrl);
@@ -203,6 +335,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [planHistory, setPlanHistory] = useState<WeeklyPlan[]>([]);
   const [shoppingChecks, setShoppingChecks] = useState<Record<string, boolean>>({});
   const [lastCloudInstallationId, setLastCloudInstallationId] = useState<string | null>(null);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [localWorkspaceUserId, setLocalWorkspaceUserId] = useState<string | null>(null);
+  const [hasLegacyDeviceData, setHasLegacyDeviceData] = useState(false);
+  const [legacyDeviceDataSummary, setLegacyDeviceDataSummary] =
+    useState<LegacyWorkspaceSummary | null>(null);
+
   const activeUserId = user?.id ?? null;
   const cloudSyncEnabled = isCloudSyncEnabled() && Boolean(activeUserId);
 
@@ -231,9 +369,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setToast(null);
   };
 
+  const applyWorkspaceToState = (
+    workspaceUserId: string | null,
+    workspace: LocalWorkspace,
+    nextReadOnlyMode: boolean,
+  ) => {
+    setLocalWorkspaceUserId(workspaceUserId);
+    setReadOnlyMode(nextReadOnlyMode);
+    setProfile(workspace.profile);
+    setCurrentPlan(workspace.currentPlan);
+    setPlanHistory(workspace.planHistory);
+    setShoppingChecks(workspace.shoppingChecks);
+  };
+
   const persistProfileLocally = (userId: string, nextProfile: UserProfile | null) => {
     writeOrRemoveJson(scopedDataKey(profileKey, userId), nextProfile);
     setProfile(nextProfile);
+    setLocalWorkspaceUserId(userId);
+    setReadOnlyMode(false);
   };
 
   const persistPlanLocally = (
@@ -245,17 +398,53 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     writeOrRemoveJson(scopedDataKey(planHistoryKey, userId), nextHistory);
     setCurrentPlan(nextPlan);
     setPlanHistory(nextHistory);
+    setLocalWorkspaceUserId(userId);
+    setReadOnlyMode(false);
   };
 
-  const persistShoppingChecksLocally = (userId: string, nextShoppingChecks: Record<string, boolean>) => {
+  const persistShoppingChecksLocally = (
+    userId: string,
+    nextShoppingChecks: Record<string, boolean>,
+  ) => {
     writeOrRemoveJson(scopedDataKey(shoppingChecksKey, userId), nextShoppingChecks);
     setShoppingChecks(nextShoppingChecks);
+    setLocalWorkspaceUserId(userId);
   };
 
-  const handleSyncFailure = (fallbackMessage: string, nextError: unknown) => {
-    const message = nextError instanceof Error ? nextError.message : fallbackMessage;
-    setError(message);
-    showToast(message, 'danger');
+  const setUserFacingError = (mapped: MappedClientError) => {
+    setError(mapped.message);
+  };
+
+  const handleSyncFailure = (
+    action:
+      | 'hydrate'
+      | 'profile'
+      | 'plan'
+      | 'shopping'
+      | 'workspace-clear'
+      | 'legacy-import'
+      | 'backup-import',
+    nextError: unknown,
+  ) => {
+    const mapped = mapSyncError(action, nextError);
+    setSyncIssue(mapped.message);
+    showToast(mapped.message, 'danger');
+  };
+
+  const requireEditableSession = (): boolean => {
+    if (activeUserId) {
+      return true;
+    }
+
+    setError(reconnectMessage);
+    return false;
+  };
+
+  const clearScopedWorkspaceForUser = (userId: string) => {
+    removeKey(scopedDataKey(profileKey, userId));
+    removeKey(scopedDataKey(currentPlanKey, userId));
+    removeKey(scopedDataKey(planHistoryKey, userId));
+    removeKey(scopedDataKey(shoppingChecksKey, userId));
   };
 
   useEffect(() => {
@@ -267,81 +456,56 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
     const bootstrap = async () => {
       setReady(false);
+
       const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
       const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
+      const legacyWorkspace = readLegacyWorkspace();
 
       writeJson(installationIdKey, storedInstallationId);
       writeJson(settingsKey, storedSettings);
       setInstallationId(storedInstallationId);
       setApiBaseUrl(storedSettings.apiBaseUrl);
+      setHasLegacyDeviceData(legacyWorkspace.hasAnyData);
+      setLegacyDeviceDataSummary(summarizeLegacyWorkspace(legacyWorkspace));
+      setError(null);
 
       if (!activeUserId) {
-        setProfile(null);
-        setCurrentPlan(null);
-        setPlanHistory([]);
-        setShoppingChecks({});
-        setLastCloudInstallationId(null);
-        setError(null);
+        const lastWorkspaceUserId = readJson<string>(lastWorkspaceUserIdKey);
+        const fallbackWorkspace =
+          typeof lastWorkspaceUserId === 'string' && lastWorkspaceUserId.trim().length > 0
+            ? readLocalWorkspace(lastWorkspaceUserId)
+            : null;
+
+        if (fallbackWorkspace?.hasAnyData && lastWorkspaceUserId) {
+          applyWorkspaceToState(lastWorkspaceUserId, fallbackWorkspace, true);
+        } else {
+          applyWorkspaceToState(
+            null,
+            {
+              profile: null,
+              currentPlan: null,
+              planHistory: [],
+              shoppingChecks: {},
+              hasAnyData: false,
+            },
+            false,
+          );
+          setLastCloudInstallationId(null);
+        }
+
         setReady(true);
         return;
       }
 
-      const scopedProfileStorageKey = scopedDataKey(profileKey, activeUserId);
-      const scopedCurrentPlanStorageKey = scopedDataKey(currentPlanKey, activeUserId);
-      const scopedPlanHistoryStorageKey = scopedDataKey(planHistoryKey, activeUserId);
-      const scopedShoppingChecksStorageKey = scopedDataKey(shoppingChecksKey, activeUserId);
+      writeJson(lastWorkspaceUserIdKey, activeUserId);
 
-      const rawScopedProfile = readJson<UserProfile>(scopedProfileStorageKey);
-      const rawScopedCurrentPlan = readJson<WeeklyPlan>(scopedCurrentPlanStorageKey);
-      const rawScopedPlanHistory = readJson<WeeklyPlan[]>(scopedPlanHistoryStorageKey);
-      const rawScopedShoppingChecks = readJson<Record<string, boolean>>(scopedShoppingChecksStorageKey);
-
-      const profileFallback = safeParseProfile(readJson<UserProfile>(profileKey));
-      const currentPlanFallback = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
-      const planHistoryFallback = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
-      const shoppingChecksFallback = safeParseShoppingChecks(
-        readJson<Record<string, boolean>>(shoppingChecksKey),
-      );
-
-      const localProfile = safeParseProfile(rawScopedProfile) ?? profileFallback;
-      const localCurrentPlan = safeParsePlan(rawScopedCurrentPlan) ?? currentPlanFallback;
-      const localPlanHistory =
-        rawScopedPlanHistory !== null
-          ? safeParsePlanHistory(rawScopedPlanHistory)
-          : planHistoryFallback;
-      const localShoppingChecks =
-        rawScopedShoppingChecks !== null
-          ? safeParseShoppingChecks(rawScopedShoppingChecks)
-          : shoppingChecksFallback;
-
-      if (localProfile && !readJson<UserProfile>(scopedProfileStorageKey)) {
-        writeJson(scopedProfileStorageKey, localProfile);
-      }
-
-      if (localCurrentPlan && !readJson<WeeklyPlan>(scopedCurrentPlanStorageKey)) {
-        writeJson(scopedCurrentPlanStorageKey, localCurrentPlan);
-      }
-
-      if (localPlanHistory.length > 0 && !readJson<WeeklyPlan[]>(scopedPlanHistoryStorageKey)) {
-        writeJson(scopedPlanHistoryStorageKey, localPlanHistory);
-      }
-
-      if (
-        Object.keys(localShoppingChecks).length > 0 &&
-        !readJson<Record<string, boolean>>(scopedShoppingChecksStorageKey)
-      ) {
-        writeJson(scopedShoppingChecksStorageKey, localShoppingChecks);
-      }
-
-      setProfile(localProfile);
-      setCurrentPlan(localCurrentPlan);
-      setPlanHistory(localPlanHistory);
-      setShoppingChecks(localShoppingChecks);
+      const localWorkspace = readLocalWorkspace(activeUserId);
+      applyWorkspaceToState(activeUserId, localWorkspace, false);
       setLastCloudInstallationId(null);
-      setError(null);
+      setSyncIssue(null);
       setReady(true);
 
-      if (!isCloudSyncEnabled()) {
+      if (!cloudSyncEnabled) {
         return;
       }
 
@@ -363,31 +527,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           );
           persistShoppingChecksLocally(activeUserId, remoteWorkspace.shoppingChecks);
           setLastCloudInstallationId(remoteWorkspace.lastInstallationId);
+          setSyncIssue(null);
           return;
         }
 
-        const hasLocalWorkspace =
-          Boolean(localProfile) ||
-          Boolean(localCurrentPlan) ||
-          localPlanHistory.length > 0 ||
-          Object.keys(localShoppingChecks).length > 0;
-
-        if (hasLocalWorkspace) {
-          await pushLocalWorkspaceToCloud(activeUserId, {
-            profile: localProfile,
-            currentPlan: localCurrentPlan,
-            planHistory: localPlanHistory,
-            shoppingChecks: localShoppingChecks,
+        if (localWorkspace.hasAnyData) {
+          await pushLocalWorkspaceToCloud({
+            profile: localWorkspace.profile,
+            currentPlan: localWorkspace.currentPlan,
+            planHistory: localWorkspace.planHistory,
+            shoppingChecks: localWorkspace.shoppingChecks,
             installationId: storedInstallationId,
           });
           setLastCloudInstallationId(storedInstallationId);
+          setSyncIssue(null);
         }
       } catch (nextError) {
         if (!cancelled) {
-          handleSyncFailure(
-            'Cloud sync is temporarily unavailable. Local data is still available on this device.',
-            nextError,
-          );
+          handleSyncFailure('hydrate', nextError);
         }
       } finally {
         if (!cancelled) {
@@ -401,11 +558,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeUserId, authReady]);
+  }, [activeUserId, authReady, cloudSyncEnabled]);
 
   const saveProfile = async (nextProfile: UserProfile) => {
-    if (!activeUserId) {
-      setError('Sign in to save a profile on this device.');
+    if (!requireEditableSession()) {
       return;
     }
 
@@ -413,32 +569,29 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      persistProfileLocally(activeUserId, nextProfile);
+      persistProfileLocally(activeUserId!, nextProfile);
 
       if (cloudSyncEnabled) {
         setOperation('syncingProfile', true);
 
         try {
-          await upsertCloudProfile(activeUserId, nextProfile);
+          await upsertCloudProfile(nextProfile);
+          setSyncIssue(null);
         } catch (nextError) {
-          handleSyncFailure(
-            'Profile was saved locally, but cloud sync could not update the account.',
-            nextError,
-          );
+          handleSyncFailure('profile', nextError);
         } finally {
           setOperation('syncingProfile', false);
         }
       }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to save profile');
-      throw nextError;
+      setError('The profile could not be saved on this device right now.');
+      throw new Error('The profile could not be saved on this device right now.');
     } finally {
       setOperation('savingProfile', false);
     }
   };
 
   const syncPlansAfterLocalChange = async (
-    userId: string,
     nextPlan: WeeklyPlan | null,
     nextHistory: WeeklyPlan[],
   ) => {
@@ -449,27 +602,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setOperation('syncingPlan', true);
 
     try {
-      await syncCloudPlans(userId, nextPlan, nextHistory);
+      await syncCloudPlans(nextPlan, nextHistory);
+      setSyncIssue(null);
     } catch (nextError) {
-      handleSyncFailure(
-        'The plan was updated locally, but cloud sync could not update the account history.',
-        nextError,
-      );
+      handleSyncFailure('plan', nextError);
     } finally {
       setOperation('syncingPlan', false);
     }
   };
 
   const generateWeek = async (profileOverride?: UserProfile) => {
-    if (!activeUserId) {
-      setError('Sign in to generate a weekly plan.');
+    if (!requireEditableSession()) {
       return;
     }
 
     const effectiveProfile = profileOverride ?? profile;
 
     if (!effectiveProfile) {
-      setError('Create a profile before generating a plan.');
+      setError('Complete the profile before generating a weekly plan.');
       return;
     }
 
@@ -480,28 +630,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       const plan = await generatePlan(apiBaseUrl, effectiveProfile, installationId);
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      persistPlanLocally(activeUserId, plan, nextHistory);
-      await syncPlansAfterLocalChange(activeUserId, plan, nextHistory);
+      persistPlanLocally(activeUserId!, plan, nextHistory);
+      await syncPlansAfterLocalChange(plan, nextHistory);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : 'Failed to generate a weekly plan. Check that the API is running.',
-      );
-      throw nextError;
+      const mapped = mapPlannerError('generate', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
     } finally {
       setOperation('generating', false);
     }
   };
 
   const replanCurrentPlan = async (request: ReplanRequest) => {
-    if (!activeUserId) {
-      setError('Sign in to update the weekly plan.');
+    if (!requireEditableSession()) {
       return;
     }
 
     if (!profile || !currentPlan) {
-      setError('You need an active profile and weekly plan before replanning.');
+      setError('Generate a weekly plan before trying to replace meals or days.');
       return;
     }
 
@@ -520,27 +666,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      persistPlanLocally(activeUserId, plan, nextHistory);
-      await syncPlansAfterLocalChange(activeUserId, plan, nextHistory);
+      persistPlanLocally(activeUserId!, plan, nextHistory);
+      await syncPlansAfterLocalChange(plan, nextHistory);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : 'Failed to update the plan. Make sure the API is reachable.',
-      );
-      throw nextError;
+      const mapped = mapPlannerError('replan', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
     } finally {
       setOperation('replanning', false);
     }
   };
 
   const validateCurrentPlan = async (): Promise<PlanValidation | null> => {
-    if (!activeUserId) {
-      setError('Sign in to validate the current plan.');
+    if (!requireEditableSession()) {
       return null;
     }
 
     if (!profile || !currentPlan) {
+      setError('Generate a weekly plan before running validation.');
       return null;
     }
 
@@ -562,14 +705,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       };
       const nextHistory = planHistory.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan));
 
-      persistPlanLocally(activeUserId, nextPlan, nextHistory);
-      await syncPlansAfterLocalChange(activeUserId, nextPlan, nextHistory);
+      persistPlanLocally(activeUserId!, nextPlan, nextHistory);
+      await syncPlansAfterLocalChange(nextPlan, nextHistory);
       return validation;
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Failed to validate the current plan.',
-      );
-      throw nextError;
+      const mapped = mapPlannerError('validate', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
     } finally {
       setOperation('validating', false);
     }
@@ -577,6 +719,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const updateApiBaseUrl = async (nextUrl: string) => {
     setOperation('updatingApiUrl', true);
+
     try {
       const normalized = nextUrl.trim() || defaultSettings.apiBaseUrl;
       const nextSettings = { apiBaseUrl: normalized };
@@ -626,10 +769,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const importBackupFile = async (): Promise<boolean> => {
-    if (!activeUserId) {
-      setError('Sign in to import a backup into your planner profile.');
-      return false;
+  const prepareBackupImport = async (): Promise<BackupImportPreview | null> => {
+    if (!requireEditableSession()) {
+      return null;
     }
 
     setOperation('importing', true);
@@ -643,104 +785,223 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (result.canceled || !result.assets?.[0]) {
-        return false;
+        return null;
       }
 
       const fileContent = await FileSystemLegacy.readAsStringAsync(result.assets[0].uri, {
         encoding: 'utf8',
       });
       const bundle = exportBundleV1Schema.parse(JSON.parse(fileContent));
-      const nextSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
 
-      persistProfileLocally(activeUserId, bundle.profile);
-      persistPlanLocally(activeUserId, bundle.currentPlan, bundle.planHistory);
-      setApiBaseUrl(nextSettings.apiBaseUrl);
-      writeJson(settingsKey, nextSettings);
-
-      if (cloudSyncEnabled) {
-        setOperation('syncingProfile', true);
-        setOperation('syncingPlan', true);
-
-        try {
-          await pushLocalWorkspaceToCloud(activeUserId, {
-            profile: bundle.profile,
-            currentPlan: bundle.currentPlan,
-            planHistory: bundle.planHistory,
-            shoppingChecks,
-            installationId,
-          });
-          setLastCloudInstallationId(installationId);
-        } catch (nextError) {
-          handleSyncFailure(
-            'Backup was imported locally, but cloud sync could not update the account.',
-            nextError,
-          );
-        } finally {
-          setOperation('syncingProfile', false);
-          setOperation('syncingPlan', false);
-        }
-      }
-
-      return true;
+      return {
+        bundle,
+        summary: summarizeBackupImport(bundle),
+      };
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Failed to import the backup file.',
-      );
-      throw nextError;
+      const mapped = mapBackupError('pick', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
     } finally {
       setOperation('importing', false);
     }
   };
 
-  const resetAllData = async () => {
-    setOperation('resetting', true);
+  const applyBackupImport = async (
+    bundle: ExportBundleV1,
+    mode: BackupImportMode,
+  ): Promise<boolean> => {
+    if (!requireEditableSession()) {
+      return false;
+    }
+
+    setOperation('importing', true);
+    setError(null);
 
     try {
-      if (activeUserId) {
-        persistProfileLocally(activeUserId, null);
-        persistPlanLocally(activeUserId, null, []);
-        persistShoppingChecksLocally(activeUserId, {});
-      }
+      const nextSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
 
-      removeKey(profileKey);
-      removeKey(currentPlanKey);
-      removeKey(planHistoryKey);
-      removeKey(shoppingChecksKey);
-      removeKey(installationIdKey);
-      removeKey(settingsKey);
-      const nextInstallationId = createInstallationId();
+      persistProfileLocally(activeUserId!, bundle.profile);
+      persistPlanLocally(activeUserId!, bundle.currentPlan, bundle.planHistory);
+      persistShoppingChecksLocally(activeUserId!, {});
+      setApiBaseUrl(nextSettings.apiBaseUrl);
+      writeJson(settingsKey, nextSettings);
 
-      writeJson(installationIdKey, nextInstallationId);
-      writeJson(settingsKey, defaultSettings);
-      writeJson(shoppingChecksKey, {});
-      setInstallationId(nextInstallationId);
-      setApiBaseUrl(defaultSettings.apiBaseUrl);
-      setProfile(null);
-      setCurrentPlan(null);
-      setPlanHistory([]);
-      setShoppingChecks({});
-      setLastCloudInstallationId(null);
-      setError(null);
-
-      if (activeUserId && cloudSyncEnabled) {
+      if (mode === 'local-and-cloud' && cloudSyncEnabled) {
         setOperation('syncingProfile', true);
         setOperation('syncingPlan', true);
         setOperation('syncingShopping', true);
 
         try {
-          await deleteCloudWorkspace(activeUserId);
+          await deleteCloudWorkspace();
+          await pushLocalWorkspaceToCloud({
+            profile: bundle.profile,
+            currentPlan: bundle.currentPlan,
+            planHistory: bundle.planHistory,
+            shoppingChecks: {},
+            installationId,
+          });
+          setLastCloudInstallationId(installationId);
+          setSyncIssue(null);
         } catch (nextError) {
-          handleSyncFailure(
-            'Local planner data was reset, but cloud data could not be cleared for this account.',
-            nextError,
-          );
+          handleSyncFailure('backup-import', nextError);
         } finally {
           setOperation('syncingProfile', false);
           setOperation('syncingPlan', false);
           setOperation('syncingShopping', false);
         }
+      } else {
+        setSyncIssue('Cloud sync is unchanged. This device now has a local-only backup copy.');
       }
+
+      return true;
+    } catch (nextError) {
+      const mapped = mapBackupError('apply', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
     } finally {
+      setOperation('importing', false);
+    }
+  };
+
+  const importLegacyDeviceData = async (mode: BackupImportMode): Promise<boolean> => {
+    if (!requireEditableSession()) {
+      return false;
+    }
+
+    const legacyWorkspace = readLegacyWorkspace();
+
+    if (!legacyWorkspace.hasAnyData) {
+      setError('There is no previous device data left to import.');
+      return false;
+    }
+
+    setOperation('importing', true);
+    setError(null);
+
+    try {
+      persistProfileLocally(activeUserId!, legacyWorkspace.profile);
+      persistPlanLocally(
+        activeUserId!,
+        legacyWorkspace.currentPlan,
+        legacyWorkspace.planHistory,
+      );
+      persistShoppingChecksLocally(activeUserId!, legacyWorkspace.shoppingChecks);
+      clearLegacyWorkspace();
+      setHasLegacyDeviceData(false);
+      setLegacyDeviceDataSummary(null);
+
+      if (mode === 'local-and-cloud' && cloudSyncEnabled) {
+        setOperation('syncingProfile', true);
+        setOperation('syncingPlan', true);
+        setOperation('syncingShopping', true);
+
+        try {
+          await pushLocalWorkspaceToCloud({
+            profile: legacyWorkspace.profile,
+            currentPlan: legacyWorkspace.currentPlan,
+            planHistory: legacyWorkspace.planHistory,
+            shoppingChecks: legacyWorkspace.shoppingChecks,
+            installationId,
+          });
+          setLastCloudInstallationId(installationId);
+          setSyncIssue(null);
+        } catch (nextError) {
+          handleSyncFailure('legacy-import', nextError);
+        } finally {
+          setOperation('syncingProfile', false);
+          setOperation('syncingPlan', false);
+          setOperation('syncingShopping', false);
+        }
+      } else {
+        setSyncIssue('Cloud sync is unchanged. The imported device data is local-only for now.');
+      }
+
+      return true;
+    } catch (nextError) {
+      const mapped = mapWorkspaceError('legacy-import', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
+    } finally {
+      setOperation('importing', false);
+    }
+  };
+
+  const clearLocalDeviceData = async () => {
+    const targetUserId = activeUserId ?? localWorkspaceUserId;
+
+    if (!targetUserId) {
+      setError('There is no device workspace to clear right now.');
+      return;
+    }
+
+    setOperation('resetting', true);
+    setError(null);
+
+    try {
+      clearScopedWorkspaceForUser(targetUserId);
+      applyWorkspaceToState(
+        activeUserId ? activeUserId : null,
+        {
+          profile: null,
+          currentPlan: null,
+          planHistory: [],
+          shoppingChecks: {},
+          hasAnyData: false,
+        },
+        !activeUserId,
+      );
+      setSyncIssue(
+        activeUserId
+          ? 'This device copy was cleared. The shared cloud workspace is unchanged.'
+          : null,
+      );
+
+      if (!activeUserId) {
+        removeKey(lastWorkspaceUserIdKey);
+      }
+    } catch (nextError) {
+      const mapped = mapWorkspaceError('local-clear', nextError);
+      setUserFacingError(mapped);
+      throw new Error(mapped.message);
+    } finally {
+      setOperation('resetting', false);
+    }
+  };
+
+  const clearCloudWorkspace = async () => {
+    if (!requireEditableSession()) {
+      return;
+    }
+
+    setOperation('resetting', true);
+    setError(null);
+    setOperation('syncingProfile', true);
+    setOperation('syncingPlan', true);
+    setOperation('syncingShopping', true);
+
+    try {
+      await deleteCloudWorkspace();
+      clearScopedWorkspaceForUser(activeUserId!);
+      applyWorkspaceToState(
+        activeUserId!,
+        {
+          profile: null,
+          currentPlan: null,
+          planHistory: [],
+          shoppingChecks: {},
+          hasAnyData: false,
+        },
+        false,
+      );
+      setLastCloudInstallationId(null);
+      setSyncIssue(null);
+    } catch (nextError) {
+      handleSyncFailure('workspace-clear', nextError);
+      throw nextError;
+    } finally {
+      setOperation('syncingProfile', false);
+      setOperation('syncingPlan', false);
+      setOperation('syncingShopping', false);
       setOperation('resetting', false);
     }
   };
@@ -756,17 +1017,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleShoppingItem = (ingredientId: string) => {
-    if (!currentPlan || !activeUserId) {
+    if (!currentPlan) {
+      return;
+    }
+
+    if (!requireEditableSession()) {
       return;
     }
 
     const itemKey = buildShoppingCheckKey(currentPlan.id, ingredientId);
-    const nextState = {
-      ...shoppingChecks,
-      [itemKey]: !shoppingChecks[itemKey],
-    };
+    const checked = !shoppingChecks[itemKey];
+    const nextState = checked
+      ? {
+          ...shoppingChecks,
+          [itemKey]: true,
+        }
+      : Object.fromEntries(Object.entries(shoppingChecks).filter(([key]) => key !== itemKey));
 
-    persistShoppingChecksLocally(activeUserId, nextState);
+    persistShoppingChecksLocally(activeUserId!, nextState);
 
     if (!cloudSyncEnabled) {
       return;
@@ -774,20 +1042,77 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
     setOperation('syncingShopping', true);
 
-    void saveCloudShoppingChecks(activeUserId, nextState, installationId)
+    void setCloudShoppingCheck(currentPlan.id, ingredientId, checked, installationId)
       .then(() => {
         setLastCloudInstallationId(installationId);
+        setSyncIssue(null);
       })
       .catch((nextError) => {
-        handleSyncFailure(
-          'Shopping progress was saved locally, but cloud sync could not update the account.',
-          nextError,
-        );
+        handleSyncFailure('shopping', nextError);
       })
       .finally(() => {
         setOperation('syncingShopping', false);
       });
   };
+
+  const accountStatus = useMemo<AccountStatus>(() => {
+    if (readOnlyMode) {
+      return {
+        kind: 'reconnect-required',
+        title: 'Reconnect required',
+        message: 'You are viewing the last device copy. Sign in again to edit or sync this workspace.',
+        tone: 'warm',
+      };
+    }
+
+    if (
+      operations.hydratingRemote ||
+      operations.syncingProfile ||
+      operations.syncingPlan ||
+      operations.syncingShopping
+    ) {
+      return {
+        kind: 'syncing',
+        title: 'Syncing account',
+        message: 'The app is reconciling your local workspace with the shared account copy.',
+        tone: 'neutral',
+      };
+    }
+
+    if (syncIssue) {
+      return {
+        kind: 'sync-error',
+        title: 'Cloud sync paused',
+        message: syncIssue,
+        tone: 'danger',
+      };
+    }
+
+    if (cloudSyncEnabled && activeUserId) {
+      return {
+        kind: 'synced',
+        title: 'Synced to your account',
+        message: 'Profile, current plan, and shopping progress are linked to the shared workspace.',
+        tone: 'success',
+      };
+    }
+
+    return {
+      kind: 'local-only',
+      title: 'Local device mode',
+      message: 'This copy is available on the current device only until the account reconnects.',
+      tone: 'warm',
+    };
+  }, [
+    activeUserId,
+    cloudSyncEnabled,
+    operations.hydratingRemote,
+    operations.syncingPlan,
+    operations.syncingProfile,
+    operations.syncingShopping,
+    readOnlyMode,
+    syncIssue,
+  ]);
 
   return (
     <AppStoreContext.Provider
@@ -805,14 +1130,21 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         shoppingChecks,
         cloudSyncEnabled,
         lastCloudInstallationId,
+        readOnlyMode,
+        hasLegacyDeviceData,
+        legacyDeviceDataSummary,
+        accountStatus,
         saveProfile,
         generateWeek,
         replanCurrentPlan,
         validateCurrentPlan,
         updateApiBaseUrl,
         exportBackupFile,
-        importBackupFile,
-        resetAllData,
+        prepareBackupImport,
+        applyBackupImport,
+        importLegacyDeviceData,
+        clearLocalDeviceData,
+        clearCloudWorkspace,
         toggleShoppingItem,
         isShoppingItemChecked,
         showToast,

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   EmptyState,
   HeroPanel,
   InfoBanner,
@@ -17,7 +18,7 @@ import { colors, radii, spacing } from '../../theme';
 
 export default function DayDetailScreen() {
   const params = useLocalSearchParams<{ dayIndex: string }>();
-  const { currentPlan, error, operations } = useAppStore();
+  const { accountStatus, currentPlan, error, operations, readOnlyMode } = useAppStore();
   const dayIndex = Number(params.dayIndex);
   const day = currentPlan?.days.find((item) => item.dayIndex === dayIndex);
 
@@ -49,7 +50,19 @@ export default function DayDetailScreen() {
           </View>
         </HeroPanel>
 
+        <AccountStateBanner
+          title={accountStatus.title}
+          message={accountStatus.message}
+          tone={accountStatus.tone}
+        />
+
         {error ? <InfoBanner message={error} tone="danger" /> : null}
+        {readOnlyMode ? (
+          <InfoBanner
+            message="This day stays visible in read-only mode. Reconnect before you swap meals or regenerate the day."
+            tone="warm"
+          />
+        ) : null}
 
         {day.meals.map((meal) => (
           <ScreenCard key={meal.id} style={styles.mealCard}>
@@ -72,6 +85,7 @@ export default function DayDetailScreen() {
                 }
                 tone="accent"
                 accessibilityLabel={`Swap ${meal.recipe.title}`}
+                disabled={readOnlyMode}
               />
             </View>
 
@@ -111,14 +125,23 @@ export default function DayDetailScreen() {
           <Pressable
             accessibilityLabel={`Regenerate ${day.label}`}
             accessibilityRole="button"
-            onPress={() => router.push(`/modal?scope=day&dayIndex=${day.dayIndex}`)}
+            onPress={() => {
+              if (!readOnlyMode) {
+                router.push(`/modal?scope=day&dayIndex=${day.dayIndex}`);
+              }
+            }}
             style={({ pressed }) => [
               styles.stickyPrimary,
-              (pressed || operations.replanning) ? styles.stickyPrimaryPressed : null,
+              (pressed || operations.replanning) && !readOnlyMode ? styles.stickyPrimaryPressed : null,
+              readOnlyMode ? styles.stickyPrimaryDisabled : null,
             ]}
           >
             <Text style={styles.stickyPrimaryText}>
-              {operations.replanning ? 'Updating day...' : 'Regenerate this day'}
+              {readOnlyMode
+                ? 'Reconnect to edit this day'
+                : operations.replanning
+                  ? 'Updating day...'
+                  : 'Regenerate this day'}
             </Text>
           </Pressable>
         </View>
@@ -208,6 +231,9 @@ const styles = StyleSheet.create({
   },
   stickyPrimaryPressed: {
     opacity: 0.92,
+  },
+  stickyPrimaryDisabled: {
+    opacity: 0.55,
   },
   stickyPrimaryText: {
     color: colors.white,

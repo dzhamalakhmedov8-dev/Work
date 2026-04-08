@@ -7,6 +7,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import { supabase, supabasePublicConfig } from './supabase';
+import { mapAuthError } from './error-mapping';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -70,7 +71,7 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (nextError) {
-          setError(nextError.message);
+          setError(mapAuthError('restore', nextError).message);
         }
 
         setSession(data.session);
@@ -82,7 +83,7 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        setError(nextError instanceof Error ? nextError.message : 'Failed to restore auth session.');
+        setError(mapAuthError('restore', nextError).message);
         setReady(true);
       });
 
@@ -142,9 +143,7 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
     };
 
     void createSessionFromUrl(incomingUrl).catch((nextError: unknown) => {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Failed to finish social sign-in.',
-      );
+      setError(mapAuthError('callback', nextError).message);
     });
   }, [incomingUrl]);
 
@@ -180,10 +179,9 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setUser(data.user);
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to sign in with email and password.';
+      const message = mapAuthError('sign-in', nextError).message;
       setError(message);
-      throw nextError;
+      throw new Error(message);
     } finally {
       setOperation('signingIn', false);
     }
@@ -214,10 +212,9 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
         needsEmailConfirmation: !data.session,
       };
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to create the account.';
+      const message = mapAuthError('sign-up', nextError).message;
       setError(message);
-      throw nextError;
+      throw new Error(message);
     } finally {
       setOperation('signingUp', false);
     }
@@ -309,13 +306,9 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
 
       throw new Error(`${provider} sign-in could not be completed.`);
     } catch (nextError) {
-      const providerLabel = provider === 'google' ? 'Google' : 'Apple';
-      const message =
-        nextError instanceof Error
-          ? nextError.message
-          : `Failed to sign in with ${providerLabel}.`;
+      const message = mapAuthError('oauth', nextError).message;
       setError(message);
-      throw nextError;
+      throw new Error(message);
     } finally {
       setOperations((current) => ({
         ...current,
@@ -342,10 +335,9 @@ export function AuthStoreProvider({ children }: { children: React.ReactNode }) {
       setSession(null);
       setUser(null);
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to sign out of this device.';
+      const message = mapAuthError('sign-out', nextError).message;
       setError(message);
-      throw nextError;
+      throw new Error(message);
     } finally {
       setOperation('signingOut', false);
     }

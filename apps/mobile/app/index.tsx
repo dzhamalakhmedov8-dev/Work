@@ -7,7 +7,7 @@ import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
 
 export default function IndexScreen() {
-  const { operations, ready, profile } = useAppStore();
+  const { operations, readOnlyMode, ready, profile } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
 
   if (!authReady || !ready) {
@@ -23,7 +23,7 @@ export default function IndexScreen() {
     );
   }
 
-  if (configured && !session) {
+  if (configured && !session && !readOnlyMode) {
     return <Redirect href={'/auth' as never} />;
   }
 
@@ -41,7 +41,7 @@ export default function IndexScreen() {
   }
 
   if (!profile) {
-    return <Redirect href="/onboarding" />;
+    return <Redirect href={readOnlyMode ? ('/auth' as never) : ('/onboarding' as never)} />;
   }
 
   return <Redirect href="/(tabs)/profile" />;

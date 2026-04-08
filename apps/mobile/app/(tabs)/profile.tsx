@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   DetailRow,
   EmptyState,
   HeroPanel,
@@ -27,12 +28,17 @@ import { colors, spacing } from '../../theme';
 
 export default function ProfileScreen() {
   const {
+    accountStatus,
     cloudSyncEnabled,
     currentPlan,
     generateWeek,
+    hasLegacyDeviceData,
+    importLegacyDeviceData,
+    legacyDeviceDataSummary,
     lastCloudInstallationId,
     operations,
     profile,
+    readOnlyMode,
   } = useAppStore();
   const { operations: authOperations, signOut, user } = useAuthStore();
 
@@ -72,28 +78,79 @@ export default function ProfileScreen() {
           </View>
         </HeroPanel>
 
+        <AccountStateBanner
+          title={accountStatus.title}
+          message={accountStatus.message}
+          tone={accountStatus.tone}
+        />
+
         {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
+
+        {hasLegacyDeviceData ? (
+          <ScreenCard tone="warm">
+            <SectionTitle
+              eyebrow="Previous device data"
+              title="Import older local data only if it belongs to this account"
+              subtitle="The app no longer auto-attaches legacy device data to newly signed-in users."
+            />
+            <DetailRow
+              label="Saved profile"
+              value={legacyDeviceDataSummary?.profileName ?? 'Unnamed legacy profile'}
+            />
+            <DetailRow
+              label="Legacy content"
+              value={`${legacyDeviceDataSummary?.hasCurrentPlan ? 'Current plan available' : 'No current plan'} | ${legacyDeviceDataSummary?.planHistoryCount ?? 0} history item(s)`}
+            />
+            <View style={styles.actionStack}>
+              <SecondaryButton
+                label={operations.importing ? 'Importing...' : 'Import to this device only'}
+                onPress={() => {
+                  void importLegacyDeviceData('local-only');
+                }}
+                disabled={operations.importing || readOnlyMode}
+              />
+              <PrimaryButton
+                label={operations.importing ? 'Importing...' : 'Import and sync to account'}
+                onPress={() => {
+                  void importLegacyDeviceData('local-and-cloud');
+                }}
+                disabled={operations.importing || readOnlyMode}
+              />
+            </View>
+          </ScreenCard>
+        ) : null}
 
         <ScreenCard tone="base">
           <SectionTitle
             eyebrow="Account"
-            title={user?.email ?? 'Signed-in account'}
-            subtitle="This account now uses Supabase Auth, while the nutrition profile and active plan can sync through the shared database."
+            title={user?.email ?? 'Device workspace'}
+            subtitle={
+              readOnlyMode
+                ? 'This is a read-only device copy. Reconnect the account to edit, regenerate, or sync.'
+                : 'This account uses Supabase Auth, while the nutrition profile and active plan sync through the shared database.'
+            }
           />
           <View style={styles.heroPills}>
             <Pill
-              label={cloudSyncEnabled ? 'Cloud sync active' : 'Local-only mode'}
-              tone={cloudSyncEnabled ? 'success' : 'warm'}
+              label={readOnlyMode ? 'Reconnect required' : cloudSyncEnabled ? 'Cloud sync active' : 'Local-only mode'}
+              tone={readOnlyMode ? 'warm' : cloudSyncEnabled ? 'success' : 'warm'}
             />
             {operations.hydratingRemote ? <Pill label="Syncing account..." tone="warm" /> : null}
             {lastCloudInstallationId ? <Pill label="Cloud workspace linked" tone="accent" /> : null}
           </View>
           <View style={styles.actionStack}>
-            <SecondaryButton
-              label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}
-              onPress={() => signOut()}
-              disabled={authOperations.signingOut}
-            />
+            {readOnlyMode ? (
+              <SecondaryButton
+                label="Reconnect account"
+                onPress={() => router.push('/auth' as never)}
+              />
+            ) : (
+              <SecondaryButton
+                label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}
+                onPress={() => signOut()}
+                disabled={authOperations.signingOut}
+              />
+            )}
           </View>
         </ScreenCard>
 
@@ -122,10 +179,12 @@ export default function ProfileScreen() {
             <SecondaryButton
               label="Edit body inputs"
               onPress={() => router.push('/onboarding?step=1')}
+              disabled={readOnlyMode}
             />
             <SecondaryButton
               label="Edit planning rules"
               onPress={() => router.push('/onboarding?step=2')}
+              disabled={readOnlyMode}
             />
           </View>
         </ScreenCard>
@@ -180,6 +239,7 @@ export default function ProfileScreen() {
           <SecondaryButton
             label="Edit hard rules"
             onPress={() => router.push('/onboarding?step=3')}
+            disabled={readOnlyMode}
           />
         </ScreenCard>
 
@@ -199,6 +259,7 @@ export default function ProfileScreen() {
           <SecondaryButton
             label="Edit taste profile"
             onPress={() => router.push('/onboarding?step=3')}
+            disabled={readOnlyMode}
           />
         </ScreenCard>
 
@@ -212,7 +273,7 @@ export default function ProfileScreen() {
             <PrimaryButton
               label={operations.generating ? 'Generating week...' : 'Generate fresh week'}
               onPress={() => generateWeek()}
-              disabled={operations.generating}
+              disabled={operations.generating || readOnlyMode}
             />
             <SecondaryButton label="Open app settings" onPress={() => router.push('/settings')} />
           </View>

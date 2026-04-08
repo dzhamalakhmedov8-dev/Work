@@ -268,3 +268,40 @@
   - fixed a local `.env` BOM issue first
   - the hosted push still fails from this environment on TLS/direct-Postgres connection to `db.rbsamgvfepzzakhlqdkj.supabase.co`
   - result: repo migration is ready, but the hosted table creation still requires a manual SQL apply in Supabase Dashboard unless remote DB connectivity changes
+- Used the Supabase Management API to update hosted auth config directly:
+  - enabled `external_google_enabled`
+  - set the hosted `site_url` to `https://nutrition-planner-mobile.vercel.app/`
+  - updated `uri_allow_list` for production, localhost, native deep link, and preview URLs
+- Verified the hosted auth config now reports:
+  - `external_google_enabled: true`
+  - Google client id is present
+- Applied the user workspace sync migration to hosted Supabase using the official Management API SQL query endpoint:
+  - created `public.user_profiles`
+  - created `public.user_plans`
+  - created `public.user_sync_state`
+- Verified via `information_schema.tables` that all three user-sync tables now exist in `public`.
+- Implemented interface hardening across the mobile app:
+  - added user-safe client error mapping for auth, sync, planner, backup, and workspace failures
+  - removed fake first-run numeric defaults from onboarding required body inputs
+  - added inline field validation in onboarding and clearer review ownership/targets summary
+  - added read-only recovery mode banners and disabled write actions on week/day/meal/shopping/profile/settings
+  - replaced comma-based replan guidance with chip-entry inputs
+  - split device clearing from cloud workspace clearing and added import preview controls
+- Reworked Supabase cloud sync implementation:
+  - mobile client now uses RPC-based writes for profile, current plan replacement, plan history, shopping toggles, and workspace clearing
+  - added hosted migration `20260408170000_interface_hardening_sync.sql`
+  - created `public.user_shopping_checks`
+  - created RPCs:
+    - `upsert_user_profile`
+    - `replace_user_current_plan`
+    - `upsert_user_plan_history`
+    - `set_user_shopping_check`
+    - `replace_user_shopping_checks`
+    - `clear_user_workspace`
+- Applied the hardening migration to hosted Supabase through the Management API SQL endpoint and verified:
+  - `public.user_shopping_checks` exists
+  - the RPC functions above now exist in `public`
+- Verified the hardening refactor locally with:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run vercel-build`

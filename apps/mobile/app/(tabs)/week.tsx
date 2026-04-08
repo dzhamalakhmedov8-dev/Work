@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   EmptyState,
   HeroPanel,
   InfoBanner,
@@ -24,7 +25,7 @@ import {
 import { colors, radii, spacing } from '../../theme';
 
 export default function WeekScreen() {
-  const { clearError, currentPlan, error, generateWeek, operations, profile } = useAppStore();
+  const { accountStatus, clearError, currentPlan, error, generateWeek, operations, profile, readOnlyMode } = useAppStore();
 
   if (!profile) {
     return (
@@ -71,6 +72,12 @@ export default function WeekScreen() {
           </View>
         </HeroPanel>
 
+        <AccountStateBanner
+          title={accountStatus.title}
+          message={accountStatus.message}
+          tone={accountStatus.tone}
+        />
+
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
         {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
@@ -88,13 +95,13 @@ export default function WeekScreen() {
               clearError();
               return generateWeek();
             }}
-            disabled={operations.generating}
+            disabled={operations.generating || readOnlyMode}
           />
           {currentPlan ? (
             <SecondaryButton
               label="Replan week"
               onPress={() => router.push('/modal?scope=week')}
-              disabled={operations.generating || operations.replanning}
+              disabled={operations.generating || operations.replanning || readOnlyMode}
             />
           ) : null}
         </View>

@@ -3,9 +3,11 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   CollapsibleSection,
   EmptyState,
   HeroPanel,
+  InfoBanner,
   MetricTile,
   Pill,
   PrimaryButton,
@@ -19,7 +21,7 @@ import { colors, radii, spacing } from '../../theme';
 
 export default function MealDetailScreen() {
   const params = useLocalSearchParams<{ mealId: string; dayIndex: string }>();
-  const { currentPlan, operations } = useAppStore();
+  const { accountStatus, currentPlan, operations, readOnlyMode } = useAppStore();
   const dayIndex = Number(params.dayIndex);
   const day = currentPlan?.days.find((item) => item.dayIndex === dayIndex);
   const meal = day?.meals.find((item) => item.id === params.mealId);
@@ -52,6 +54,19 @@ export default function MealDetailScreen() {
             <Pill label={`${meal.recipe.ingredients.length} ingredients`} tone="ink" />
           </View>
         </HeroPanel>
+
+        <AccountStateBanner
+          title={accountStatus.title}
+          message={accountStatus.message}
+          tone={accountStatus.tone}
+        />
+
+        {readOnlyMode ? (
+          <InfoBanner
+            message="Recipe details stay visible in read-only mode. Reconnect before you swap this meal."
+            tone="warm"
+          />
+        ) : null}
 
         <ScreenCard tone="accent">
           <View style={styles.metricRow}>
@@ -128,14 +143,22 @@ export default function MealDetailScreen() {
         <SmallButton label="Back to day" onPress={() => router.back()} />
         <View style={styles.stickyPrimaryWrap}>
           <PrimaryButton
-            label={operations.replanning ? 'Updating meal...' : 'Swap this meal'}
+            label={
+              readOnlyMode
+                ? 'Reconnect to swap this meal'
+                : operations.replanning
+                  ? 'Updating meal...'
+                  : 'Swap this meal'
+            }
             onPress={() =>
-              router.push(
-                `/modal?scope=meal&dayIndex=${day.dayIndex}&mealSlotId=${meal.id}&slot=${meal.slotType}`,
-              )
+              !readOnlyMode
+                ? router.push(
+                    `/modal?scope=meal&dayIndex=${day.dayIndex}&mealSlotId=${meal.id}&slot=${meal.slotType}`,
+                  )
+                : undefined
             }
             accessibilityLabel={`Swap ${meal.recipe.title}`}
-            disabled={operations.replanning}
+            disabled={operations.replanning || readOnlyMode}
           />
         </View>
       </StickyActionBar>

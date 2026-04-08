@@ -27,6 +27,7 @@ type CardTone =
 type PillTone = 'neutral' | 'accent' | 'warm' | 'ink' | 'success' | 'danger';
 type BannerTone = 'neutral' | 'danger' | 'success' | 'warm';
 type ToastTone = 'neutral' | 'danger' | 'success';
+type AccountBannerTone = 'neutral' | 'success' | 'warm' | 'danger';
 
 const resolveCardTone = (tone: CardTone): CardTone =>
   tone === 'neutral' ? 'elevated' : tone === 'muted' ? 'base' : tone;
@@ -451,13 +452,21 @@ export function InlineFieldHint({ children }: { children: React.ReactNode }) {
   return <Text style={styles.fieldHint}>{children}</Text>;
 }
 
-export function AppTextInput(props: TextInputProps) {
+export function FieldErrorText({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.fieldError}>{children}</Text>;
+}
+
+export function AppTextInput(
+  props: TextInputProps & {
+    hasError?: boolean;
+  },
+) {
   return (
     <TextInput
       placeholderTextColor={colors.inkMuted}
       selectionColor={colors.accent}
       {...props}
-      style={[styles.input, props.style]}
+      style={[styles.input, props.hasError ? styles.inputError : null, props.style]}
     />
   );
 }
@@ -640,6 +649,39 @@ export function ValidationStatusCard({
           ))}
         </View>
       ) : null}
+    </ScreenCard>
+  );
+}
+
+export function AccountStateBanner({
+  title,
+  message,
+  tone = 'neutral',
+}: {
+  title: string;
+  message: string;
+  tone?: AccountBannerTone;
+}) {
+  return (
+    <ScreenCard
+      tone={
+        tone === 'success'
+          ? 'success'
+          : tone === 'danger'
+            ? 'danger'
+            : tone === 'warm'
+              ? 'warm'
+              : 'base'
+      }
+    >
+      <View style={styles.accountBannerHeader}>
+        <Text style={styles.accountBannerTitle}>{title}</Text>
+        <Pill
+          label={tone === 'success' ? 'Synced' : tone === 'danger' ? 'Needs review' : tone === 'warm' ? 'Attention' : 'Working'}
+          tone={tone === 'success' ? 'success' : tone === 'danger' ? 'danger' : tone === 'warm' ? 'warm' : 'accent'}
+        />
+      </View>
+      <Text style={styles.accountBannerBody}>{message}</Text>
     </ScreenCard>
   );
 }
@@ -1056,6 +1098,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  fieldError: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
   input: {
     backgroundColor: colors.white,
     borderColor: colors.border,
@@ -1066,6 +1114,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: 14,
     paddingVertical: 13,
+  },
+  inputError: {
+    borderColor: colors.danger,
   },
   chipInputList: {
     flexDirection: 'row',
@@ -1189,6 +1240,24 @@ const styles = StyleSheet.create({
   },
   validationLine: {
     color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  accountBannerHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  accountBannerTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 23,
+    paddingRight: spacing.sm,
+  },
+  accountBannerBody: {
+    color: colors.inkMuted,
     fontSize: 14,
     lineHeight: 20,
   },

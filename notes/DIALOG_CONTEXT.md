@@ -199,3 +199,21 @@ This file preserves the stable context of the current collaboration so we do not
   - one signed-in account owns one nutrition workspace
   - the mobile app keeps a local cache for fast reads
   - the signed-in workspace syncs profile, plans, and shopping checks to Supabase `public` tables through RLS
+- Google provider is now enabled in hosted Supabase auth config for project `rbsamgvfepzzakhlqdkj`.
+- Hosted Supabase auth URL config now uses:
+  - `site_url`: `https://nutrition-planner-mobile.vercel.app/`
+  - allowed redirects for production, localhost, and `nutrition-planner://auth`
+- The hosted Supabase user-workspace sync tables now exist:
+  - `public.user_profiles`
+  - `public.user_plans`
+  - `public.user_sync_state`
+- The current interface hardening direction is now:
+  - no silent import of legacy global device data into a signed-in account
+  - read-only recovery is allowed when a scoped local workspace exists but the auth session is gone
+  - raw Supabase/provider/schema errors should never surface directly in consumer UI
+  - account workspace writes use Supabase RPCs for atomic profile/plan/shopping sync
+  - shopping sync uses row-based checks in `public.user_shopping_checks`
+  - destructive actions stay split between device-only clearing and cloud workspace clearing
+- Hosted Supabase hardening schema now also exists:
+  - `public.user_shopping_checks`
+  - RPCs for profile/plan/shopping/workspace sync are now available in `public`

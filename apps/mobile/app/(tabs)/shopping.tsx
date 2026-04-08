@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   CollapsibleSection,
   EmptyState,
   HeroPanel,
@@ -16,7 +17,14 @@ import { formatShortDateTime } from '../../lib/format';
 import { colors, radii, spacing } from '../../theme';
 
 export default function ShoppingScreen() {
-  const { currentPlan, error, isShoppingItemChecked, toggleShoppingItem } = useAppStore();
+  const {
+    accountStatus,
+    currentPlan,
+    error,
+    isShoppingItemChecked,
+    readOnlyMode,
+    toggleShoppingItem,
+  } = useAppStore();
 
   if (!currentPlan) {
     return (
@@ -69,7 +77,19 @@ export default function ShoppingScreen() {
           </View>
         </HeroPanel>
 
+        <AccountStateBanner
+          title={accountStatus.title}
+          message={accountStatus.message}
+          tone={accountStatus.tone}
+        />
+
         {error ? <InfoBanner message={error} tone="danger" /> : null}
+        {readOnlyMode ? (
+          <InfoBanner
+            message="Shopping progress is visible from the saved device copy, but reconnect before you change checklist state."
+            tone="warm"
+          />
+        ) : null}
 
         <SectionTitle
           eyebrow="Store mode"
@@ -98,11 +118,17 @@ export default function ShoppingScreen() {
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked }}
                       accessibilityLabel={`${item.name}, ${Math.round(item.grams)} grams`}
-                      onPress={() => toggleShoppingItem(item.ingredientId)}
+                      onPress={() => {
+                        if (!readOnlyMode) {
+                          toggleShoppingItem(item.ingredientId);
+                        }
+                      }}
+                      disabled={readOnlyMode}
                       style={({ pressed }) => [
                         styles.itemRow,
                         checked ? styles.itemRowChecked : null,
-                        pressed ? styles.itemRowPressed : null,
+                        pressed && !readOnlyMode ? styles.itemRowPressed : null,
+                        readOnlyMode ? styles.itemRowDisabled : null,
                       ]}
                     >
                       <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
@@ -114,7 +140,9 @@ export default function ShoppingScreen() {
                         </Text>
                         <Text style={styles.itemMeta}>{Math.round(item.grams)} g</Text>
                       </View>
-                      <Text style={styles.itemAction}>{checked ? 'Done' : 'Tap to check'}</Text>
+                      <Text style={styles.itemAction}>
+                        {readOnlyMode ? 'Reconnect to edit' : checked ? 'Done' : 'Tap to check'}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -171,6 +199,9 @@ const styles = StyleSheet.create({
   },
   itemRowPressed: {
     opacity: 0.94,
+  },
+  itemRowDisabled: {
+    opacity: 0.72,
   },
   checkbox: {
     alignItems: 'center',

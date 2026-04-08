@@ -19,9 +19,11 @@ export default function RootLayout() {
 
 function AppShell() {
   const segments = useSegments();
-  const { clearToast, operations, ready, profile, toast } = useAppStore();
+  const { clearToast, operations, readOnlyMode, ready, profile, toast } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
   const inAuthFlow = String(segments[0] ?? '') === 'auth';
+  const inWriteOnlyFlow =
+    String(segments[0] ?? '') === 'onboarding' || String(segments[0] ?? '') === 'modal';
 
   if (!authReady || !ready) {
     return (
@@ -33,7 +35,11 @@ function AppShell() {
     );
   }
 
-  if (configured && !session && !inAuthFlow) {
+  if (configured && !session && !inAuthFlow && !readOnlyMode) {
+    return <Redirect href={'/auth' as never} />;
+  }
+
+  if (configured && !session && readOnlyMode && inWriteOnlyFlow) {
     return <Redirect href={'/auth' as never} />;
   }
 

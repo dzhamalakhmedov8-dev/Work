@@ -16,6 +16,7 @@ import {
   ChipInput,
   ChoiceChip,
   CollapsibleSection,
+  FieldErrorText,
   HeroPanel,
   InfoBanner,
   InlineFieldHint,
@@ -29,6 +30,7 @@ import {
   StickyActionBar,
 } from '../components/ui';
 import { useAppStore } from '../lib/app-store';
+import { useAuthStore } from '../lib/auth-store';
 import { formatActivityLevel, formatGoal, formatList } from '../lib/format';
 import { colors, spacing } from '../theme';
 
@@ -93,10 +95,10 @@ const validateRange = (
 
 const createDraft = (profile?: UserProfile | null): OnboardingDraft => ({
   name: profile?.name ?? '',
-  age: profile ? String(profile.age) : '30',
+  age: profile ? String(profile.age) : '',
   sex: profile?.sex ?? 'male',
-  heightCm: profile ? String(profile.heightCm) : '178',
-  weightKg: profile ? String(profile.weightKg) : '78',
+  heightCm: profile ? String(profile.heightCm) : '',
+  weightKg: profile ? String(profile.weightKg) : '',
   restingHeartRate: profile?.restingHeartRate ? String(profile.restingHeartRate) : '',
   targetWeightKg: profile?.targetWeightKg ? String(profile.targetWeightKg) : '',
   goal: profile?.goal ?? 'maintain',
@@ -105,8 +107,7 @@ const createDraft = (profile?: UserProfile | null): OnboardingDraft => ({
   allergies: profile?.dietaryConstraints.allergies ?? [],
   forbiddenFoods: profile?.dietaryConstraints.forbiddenFoods ?? [],
   dislikedFoods: profile?.dietaryConstraints.dislikedFoods ?? [],
-  preferredCuisines:
-    profile?.dietaryConstraints.preferredCuisines ?? ['Mediterranean', 'Balanced bowls'],
+  preferredCuisines: profile?.dietaryConstraints.preferredCuisines ?? [],
   cookingTimePreference: profile?.dietaryConstraints.cookingTimePreference ?? 'balanced',
 });
 
@@ -178,6 +179,7 @@ export default function OnboardingScreen() {
     saveProfile,
     generateWeek,
   } = useAppStore();
+  const { user } = useAuthStore();
 
   const [draft, setDraft] = useState<OnboardingDraft>(() => createDraft(profile));
   const [step, setStep] = useState<OnboardingStep>(requestedStep);
@@ -244,6 +246,8 @@ export default function OnboardingScreen() {
       return null;
     }
   }, [previewProfile]);
+
+  const requiredInputsComplete = stepErrors[1].length === 0;
 
   const nextStep = () => {
     clearError();
@@ -332,6 +336,7 @@ export default function OnboardingScreen() {
                 onChangeText={(value) => setDraft((current) => ({ ...current, age: value }))}
                 keyboardType="number-pad"
                 hint="Use years. The planner supports adult profiles."
+                error={bodyErrors.age}
               />
               <SegmentedControl
                 label="Sex used for BMR"
@@ -351,6 +356,7 @@ export default function OnboardingScreen() {
                 onChangeText={(value) => setDraft((current) => ({ ...current, heightCm: value }))}
                 keyboardType="decimal-pad"
                 style={styles.inputColumn}
+                error={bodyErrors.heightCm}
               />
               <LabeledInput
                 label="Weight (kg)"
@@ -358,6 +364,7 @@ export default function OnboardingScreen() {
                 onChangeText={(value) => setDraft((current) => ({ ...current, weightKg: value }))}
                 keyboardType="decimal-pad"
                 style={styles.inputColumn}
+                error={bodyErrors.weightKg}
               />
             </View>
 
@@ -381,6 +388,7 @@ export default function OnboardingScreen() {
                   keyboardType="number-pad"
                   placeholder="Optional"
                   style={styles.inputColumn}
+                  error={bodyErrors.restingHeartRate}
                 />
                 <LabeledInput
                   label="Target weight"
@@ -391,6 +399,7 @@ export default function OnboardingScreen() {
                   keyboardType="decimal-pad"
                   placeholder="Optional"
                   style={styles.inputColumn}
+                  error={bodyErrors.targetWeightKg}
                 />
               </View>
             </CollapsibleSection>
@@ -551,6 +560,28 @@ export default function OnboardingScreen() {
 
             <ScreenCard>
               <SectionTitle
+                eyebrow="Readiness"
+                title="Confirm the owner and required inputs"
+                subtitle="The app only generates a plan from confirmed data now, not seeded placeholder numbers."
+              />
+              <SummaryRow
+                label="Account owner"
+                value={user?.email ?? 'Signed-in account required to save this workspace'}
+              />
+              <SummaryRow
+                label="Required body data"
+                value={
+                  requiredInputsComplete
+                    ? 'Complete and ready for generation'
+                    : 'Some required body inputs still need attention'
+                }
+              />
+              <SummaryRow label="Goal" value={formatGoal(draft.goal)} />
+              <SummaryRow label="Activity level" value={formatActivityLevel(draft.activityLevel)} />
+            </ScreenCard>
+
+            <ScreenCard>
+              <SectionTitle
                 eyebrow="Review"
                 title="Hard rules and taste summary"
                 subtitle="Take one last glance at the exclusions before you generate the week."
@@ -606,18 +637,21 @@ function FieldGroup({ children }: { children: React.ReactNode }) {
 function LabeledInput({
   label,
   hint,
+  error,
   style,
   ...props
 }: React.ComponentProps<typeof AppTextInput> & {
   label: string;
   hint?: string;
+  error?: string | null;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[styles.fieldGroup, style]}>
       <Text style={styles.groupLabel}>{label}</Text>
       {hint ? <InlineFieldHint>{hint}</InlineFieldHint> : null}
-      <AppTextInput {...props} />
+      <AppTextInput {...props} hasError={Boolean(error)} />
+      {error ? <FieldErrorText>{error}</FieldErrorText> : null}
     </View>
   );
 }

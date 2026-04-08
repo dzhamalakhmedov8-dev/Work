@@ -5,11 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReplanReason, ReplanScope } from '@nutrition-planner/shared';
 
 import {
-  AppTextInput,
+  ChipInput,
   ChoiceChip,
   HeroPanel,
   InfoBanner,
-  InlineFieldHint,
   Pill,
   PrimaryButton,
   ScreenCard,
@@ -38,10 +37,10 @@ export default function ReplanModalScreen() {
     dayIndex?: string;
     mealSlotId?: string;
   }>();
-  const { clearError, error, operations, replanCurrentPlan, showToast } = useAppStore();
+  const { clearError, error, operations, readOnlyMode, replanCurrentPlan, showToast } = useAppStore();
   const [reason, setReason] = useState<ReplanReason>('refresh');
-  const [blockedFoods, setBlockedFoods] = useState('');
-  const [preferredCuisines, setPreferredCuisines] = useState('');
+  const [blockedFoods, setBlockedFoods] = useState<string[]>([]);
+  const [preferredCuisines, setPreferredCuisines] = useState<string[]>([]);
   const scope = (params.scope ?? 'week') as ReplanScope;
   const scopeCopy = useMemo(() => scopeLabels[scope], [scope]);
 
@@ -54,11 +53,9 @@ export default function ReplanModalScreen() {
         dayIndex: params.dayIndex ? Number(params.dayIndex) : undefined,
         mealSlotId: params.mealSlotId,
         blockedFoods: blockedFoods
-          .split(',')
           .map((item) => item.trim())
           .filter(Boolean),
         preferredCuisines: preferredCuisines
-          .split(',')
           .map((item) => item.trim())
           .filter(Boolean),
       });
@@ -83,6 +80,12 @@ export default function ReplanModalScreen() {
         </HeroPanel>
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
+        {readOnlyMode ? (
+          <InfoBanner
+            message="Reconnect the account before you replace meals or regenerate part of the plan."
+            tone="warm"
+          />
+        ) : null}
 
         <ScreenCard>
           <SectionTitle
@@ -110,32 +113,28 @@ export default function ReplanModalScreen() {
             subtitle="These hints apply only to this replacement request."
           />
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Block foods for this replacement</Text>
-            <InlineFieldHint>Use a short comma-separated list, like salmon or chickpeas.</InlineFieldHint>
-            <AppTextInput
-              value={blockedFoods}
-              onChangeText={setBlockedFoods}
-              placeholder="Salmon, chickpeas"
-            />
-          </View>
+          <ChipInput
+            label="Block foods for this replacement"
+            values={blockedFoods}
+            onChange={setBlockedFoods}
+            placeholder="Salmon, chickpeas"
+            hint="Use one item at a time or paste a comma-separated list."
+          />
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Bias toward a cuisine</Text>
-            <InlineFieldHint>Good for when you want the new option to stay in the same food mood.</InlineFieldHint>
-            <AppTextInput
-              value={preferredCuisines}
-              onChangeText={setPreferredCuisines}
-              placeholder="Mediterranean, Asian-inspired"
-            />
-          </View>
+          <ChipInput
+            label="Bias toward a cuisine"
+            values={preferredCuisines}
+            onChange={setPreferredCuisines}
+            placeholder="Mediterranean, Asian-inspired"
+            hint="Helpful when you want the replacement to stay in the same food mood."
+          />
         </ScreenCard>
 
         <View style={styles.actions}>
           <PrimaryButton
             label={operations.replanning ? 'Applying replan...' : 'Apply replan'}
             onPress={applyReplan}
-            disabled={operations.replanning}
+            disabled={operations.replanning || readOnlyMode}
           />
           <SecondaryButton
             label="Cancel"
@@ -169,14 +168,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  fieldGroup: {
-    gap: spacing.sm,
-  },
-  fieldLabel: {
-    color: colors.inkSoft,
-    fontSize: 13,
-    fontWeight: '700',
   },
   actions: {
     gap: spacing.sm,

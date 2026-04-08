@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AccountStateBanner,
   AppTextInput,
   HeroPanel,
   InfoBanner,
@@ -10,21 +11,22 @@ import {
   PrimaryButton,
   ScreenCard,
   SectionTitle,
-  SegmentedControl,
   SecondaryButton,
   SocialButton,
 } from '../components/ui';
+import { useAppStore } from '../lib/app-store';
 import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
 
-type AuthMode = 'sign-in' | 'sign-up';
+type AuthStage = 'social' | 'sign-in' | 'sign-up' | 'check-email' | 'reconnect';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen() {
+  const { accountStatus, hasLegacyDeviceData, legacyDeviceDataSummary, readOnlyMode } = useAppStore();
   const { configured, error, operations, clearError, signIn, signUp, signInWithOAuth } =
     useAuthStore();
-  const [mode, setMode] = useState<AuthMode>('sign-in');
+  const [stage, setStage] = useState<AuthStage>(readOnlyMode ? 'reconnect' : 'social');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,7 +35,15 @@ export default function AuthScreen() {
     tone: 'success' | 'warm' | 'danger';
   } | null>(null);
 
+  useEffect(() => {
+    setStage(readOnlyMode ? 'reconnect' : 'social');
+  }, [readOnlyMode]);
+
   const validationMessage = useMemo(() => {
+    if (stage !== 'sign-in' && stage !== 'sign-up') {
+      return null;
+    }
+
     if (!email.trim()) {
       return 'Email is required.';
     }
@@ -50,12 +60,12 @@ export default function AuthScreen() {
       return 'Password must be at least 6 characters.';
     }
 
-    if (mode === 'sign-up' && confirmPassword !== password) {
+    if (stage === 'sign-up' && confirmPassword !== password) {
       return 'Passwords must match to create the account.';
     }
 
     return null;
-  }, [confirmPassword, email, mode, password]);
+  }, [confirmPassword, email, password, stage]);
 
   const submit = async () => {
     setMessage(null);
@@ -70,7 +80,7 @@ export default function AuthScreen() {
     }
 
     try {
-      if (mode === 'sign-in') {
+      if (stage === 'sign-in' || stage === 'reconnect') {
         await signIn(email, password);
         setMessage({
           text: 'Signed in on this device.',
@@ -80,26 +90,71 @@ export default function AuthScreen() {
       }
 
       const result = await signUp(email, password);
+
+      if (result.needsEmailConfirmation) {
+        setStage('check-email');
+        setMessage({
+          text: 'Account created. Check your email to confirm the address before signing in.',
+          tone: 'warm',
+        });
+        return;
+      }
+
       setMessage({
-        text: result.needsEmailConfirmation
-          ? 'Account created. Check your email to confirm the address before signing in.'
-          : 'Account created and signed in.',
-        tone: result.needsEmailConfirmation ? 'warm' : 'success',
+        text: 'Account created and signed in.',
+        tone: 'success',
       });
     } catch {
-      // The auth store already captures the message.
+      // The auth store already captures the user-safe message.
     }
   };
+
+  const heroCopy = (() => {
+    if (stage === 'reconnect') {
+      return {
+        eyebrow: 'Reconnect',
+        title: 'Sign in again to keep editing and syncing this workspace.',
+        subtitle:
+          'Your last local copy is still visible on this device, but writes and sync stay locked until you reconnect.',
+      };
+    }
+
+    if (stage === 'check-email') {
+      return {
+        eyebrow: 'Check your email',
+        title: 'Confirm the account before you sign in.',
+        subtitle:
+          'Email confirmation is enabled for password accounts, so the next step happens in your inbox.',
+      };
+    }
+
+    return {
+      eyebrow: 'Account',
+      title: 'Sign in before you build and sync your nutrition week.',
+      subtitle:
+        'Continue with Google, Apple, or email. Supabase Auth keeps one planner workspace tied to one account, while the app still keeps the active week locally for fast access.',
+    };
+  })();
+
+  const showPasswordForm = stage === 'sign-in' || stage === 'sign-up' || stage === 'reconnect';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <HeroPanel
-          eyebrow="Account"
-          title="Sign in before you build and sync your nutrition week."
-          subtitle="Continue with Google, Apple, or email. Supabase Auth keeps one planner workspace tied to one account, while the app still stores the active week locally for fast access."
-          tone="accent"
+          eyebrow={heroCopy.eyebrow}
+          title={heroCopy.title}
+          subtitle={heroCopy.subtitle}
+          tone={stage === 'check-email' ? 'warm' : 'accent'}
         />
+
+        {(stage === 'reconnect' || readOnlyMode) && (
+          <AccountStateBanner
+            title={accountStatus.title}
+            message={accountStatus.message}
+            tone={accountStatus.tone}
+          />
+        )}
 
         {!configured ? (
           <InfoBanner
@@ -111,131 +166,206 @@ export default function AuthScreen() {
         {message ? <InfoBanner message={message.text} tone={message.tone} /> : null}
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
-        <ScreenCard>
-          <SectionTitle
-            eyebrow="Fastest way"
-            title="Continue with social sign-in"
-            subtitle="Use your existing Google or Apple account and return straight to your planner."
-          />
-
-          <View style={styles.socialGroup}>
-            <SocialButton
-              label={
-                operations.socialProvider === 'google'
-                  ? 'Opening Google...'
-                  : 'Continue with Google'
-              }
-              provider="google"
-              onPress={() => signInWithOAuth('google')}
-              disabled={!configured || Boolean(operations.socialProvider)}
-              accessibilityLabel="Continue with Google"
+        {hasLegacyDeviceData ? (
+          <ScreenCard tone="warm">
+            <SectionTitle
+              eyebrow="Previous device data"
+              title="Legacy local data was found"
+              subtitle="It will not be attached to this account automatically. Import it manually from the signed-in workspace if you decide to keep it."
             />
-            <SocialButton
-              label={
-                operations.socialProvider === 'apple'
-                  ? 'Opening Apple...'
-                  : 'Continue with Apple'
-              }
-              provider="apple"
-              onPress={() => signInWithOAuth('apple')}
-              disabled={!configured || Boolean(operations.socialProvider)}
-              accessibilityLabel="Continue with Apple"
+            <Text style={styles.legacyMeta}>
+              {legacyDeviceDataSummary?.profileName
+                ? `Saved profile: ${legacyDeviceDataSummary.profileName}`
+                : 'No named profile was found.'}
+            </Text>
+            <Text style={styles.legacyMeta}>
+              {legacyDeviceDataSummary?.hasCurrentPlan ? 'A current plan is available.' : 'No current plan found.'}
+              {' '}
+              {legacyDeviceDataSummary ? `${legacyDeviceDataSummary.planHistoryCount} history item(s).` : ''}
+            </Text>
+          </ScreenCard>
+        ) : null}
+
+        {stage !== 'check-email' ? (
+          <ScreenCard>
+            <SectionTitle
+              eyebrow="Fastest way"
+              title={stage === 'reconnect' ? 'Reconnect with social sign-in' : 'Continue with social sign-in'}
+              subtitle="Use your existing Google or Apple account and return straight to your planner."
             />
-          </View>
 
-          <InlineFieldHint>
-            Google and Apple must be enabled for this Supabase project before these buttons can
-            complete the sign-in.
-          </InlineFieldHint>
-        </ScreenCard>
+            <View style={styles.socialGroup}>
+              <SocialButton
+                label={
+                  operations.socialProvider === 'google'
+                    ? 'Opening Google...'
+                    : 'Continue with Google'
+                }
+                provider="google"
+                onPress={() => signInWithOAuth('google')}
+                disabled={!configured || Boolean(operations.socialProvider)}
+                accessibilityLabel="Continue with Google"
+              />
+              <SocialButton
+                label={
+                  operations.socialProvider === 'apple'
+                    ? 'Opening Apple...'
+                    : 'Continue with Apple'
+                }
+                provider="apple"
+                onPress={() => signInWithOAuth('apple')}
+                disabled={!configured || Boolean(operations.socialProvider)}
+                accessibilityLabel="Continue with Apple"
+              />
+            </View>
 
-        <ScreenCard>
-          <SectionTitle
-            eyebrow="Fallback"
-            title="Email and password"
-            subtitle="Use an existing account or create a new one if you prefer password-based access."
-          />
-
-          <SegmentedControl
-            label="Mode"
-            value={mode}
-            onChange={(nextMode) => {
-              setMode(nextMode);
-              setMessage(null);
-              clearError();
-            }}
-            options={[
-              { label: 'Sign in', value: 'sign-in' as const },
-              { label: 'Create account', value: 'sign-up' as const },
-            ]}
-          />
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
-            <AppTextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
-            <AppTextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              placeholder="At least 6 characters"
-            />
             <InlineFieldHint>
-              Email and password stays available as a backup if social sign-in is not configured yet.
+              Google and Apple must be enabled for this Supabase project before these buttons can
+              complete the sign-in.
             </InlineFieldHint>
-          </View>
 
-          {mode === 'sign-up' ? (
+            {stage === 'social' ? (
+              <View style={styles.actionStack}>
+                <SecondaryButton
+                  label="Sign in with email instead"
+                  onPress={() => {
+                    setStage('sign-in');
+                    setMessage(null);
+                    clearError();
+                  }}
+                />
+                <SecondaryButton
+                  label="Create account with email"
+                  onPress={() => {
+                    setStage('sign-up');
+                    setMessage(null);
+                    clearError();
+                  }}
+                />
+              </View>
+            ) : null}
+          </ScreenCard>
+        ) : null}
+
+        {showPasswordForm ? (
+          <ScreenCard tone="base">
+            <SectionTitle
+              eyebrow={stage === 'sign-up' ? 'Create account' : 'Email access'}
+              title={stage === 'sign-up' ? 'Create an account with email' : 'Sign in with email'}
+              subtitle={
+                stage === 'reconnect'
+                  ? 'Use email and password if you prefer to reconnect without social sign-in.'
+                  : 'Password access stays available as a fallback even when social sign-in exists.'
+              }
+            />
+
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Confirm password</Text>
+              <Text style={styles.label}>Email</Text>
+              <AppTextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                hasError={Boolean(validationMessage && validationMessage.toLowerCase().includes('email'))}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Password</Text>
               <AppTextInput
                 autoCapitalize="none"
                 autoCorrect={false}
                 secureTextEntry
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Repeat the password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="At least 6 characters"
+                hasError={Boolean(validationMessage && validationMessage.toLowerCase().includes('password'))}
               />
             </View>
-          ) : null}
 
-          <PrimaryButton
-            label={
-              mode === 'sign-in'
-                ? operations.signingIn
-                  ? 'Signing in...'
-                  : 'Sign in'
-                : operations.signingUp
-                  ? 'Creating account...'
-                  : 'Create account'
-            }
-            onPress={submit}
-            disabled={!configured || Boolean(validationMessage) || operations.signingIn || operations.signingUp}
-          />
+            {stage === 'sign-up' ? (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Confirm password</Text>
+                <AppTextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Repeat the password"
+                  hasError={Boolean(validationMessage && validationMessage.toLowerCase().includes('match'))}
+                />
+              </View>
+            ) : null}
 
-          {mode === 'sign-up' ? (
-            <SecondaryButton
-              label="I already have an account"
-              onPress={() => {
-                setMode('sign-in');
-                setMessage(null);
-                clearError();
-              }}
+            <PrimaryButton
+              label={
+                stage === 'sign-up'
+                  ? operations.signingUp
+                    ? 'Creating account...'
+                    : 'Create account'
+                  : operations.signingIn
+                    ? 'Signing in...'
+                    : stage === 'reconnect'
+                      ? 'Reconnect account'
+                      : 'Sign in'
+              }
+              onPress={submit}
+              disabled={!configured || Boolean(validationMessage) || operations.signingIn || operations.signingUp}
             />
-          ) : null}
-        </ScreenCard>
+
+            <View style={styles.actionStack}>
+              {stage === 'sign-up' ? (
+                <SecondaryButton
+                  label="I already have an account"
+                  onPress={() => {
+                    setStage('sign-in');
+                    setMessage(null);
+                    clearError();
+                  }}
+                />
+              ) : null}
+              <SecondaryButton
+                label="Back to social sign-in"
+                onPress={() => {
+                  setStage(readOnlyMode ? 'reconnect' : 'social');
+                  setMessage(null);
+                  clearError();
+                }}
+              />
+            </View>
+          </ScreenCard>
+        ) : null}
+
+        {stage === 'check-email' ? (
+          <ScreenCard tone="accent">
+            <SectionTitle
+              eyebrow="Next step"
+              title="Open your inbox"
+              subtitle="After confirming the address, come back and sign in."
+            />
+            <View style={styles.actionStack}>
+              <PrimaryButton
+                label="Back to sign in"
+                onPress={() => {
+                  setStage('sign-in');
+                  setMessage(null);
+                  clearError();
+                }}
+              />
+              <SecondaryButton
+                label="Use social sign-in instead"
+                onPress={() => {
+                  setStage('social');
+                  setMessage(null);
+                  clearError();
+                }}
+              />
+            </View>
+          </ScreenCard>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -251,15 +381,23 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.xxl + 36,
   },
-  fieldGroup: {
+  socialGroup: {
     gap: spacing.sm,
   },
-  socialGroup: {
+  actionStack: {
+    gap: spacing.sm,
+  },
+  fieldGroup: {
     gap: spacing.sm,
   },
   label: {
     color: colors.inkSoft,
     fontSize: 13,
     fontWeight: '700',
+  },
+  legacyMeta: {
+    color: colors.inkMuted,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
