@@ -67,12 +67,18 @@ const postJson = async <T>(
   path: string,
   body: unknown,
   installationId: string,
+  accessToken?: string | null,
 ): Promise<T> => {
   const response = await fetch(`${normalizeApiBaseUrl(apiBaseUrl)}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Installation-Id': installationId,
+      ...(accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : {}),
     },
     body: JSON.stringify(body),
   });
@@ -84,11 +90,12 @@ export const generatePlan = async (
   apiBaseUrl: string,
   profile: UserProfile,
   installationId: string,
+  accessToken?: string | null,
 ): Promise<WeeklyPlan> => {
   const input = generatePlanInputSchema.parse({ profile });
   const payload = await postJson<{
     plan: WeeklyPlan;
-  }>(apiBaseUrl, '/v1/plan/generate', input, installationId);
+  }>(apiBaseUrl, '/v1/plan/generate', input, installationId, accessToken);
 
   return weeklyPlanSchema.parse(payload.plan);
 };
@@ -97,11 +104,12 @@ export const replanPlan = async (
   apiBaseUrl: string,
   input: ReplanPlanInput,
   installationId: string,
+  accessToken?: string | null,
 ): Promise<WeeklyPlan> => {
   const parsedInput = replanPlanInputSchema.parse(input);
   const payload = await postJson<{
     plan: WeeklyPlan;
-  }>(apiBaseUrl, '/v1/plan/replan', parsedInput, installationId);
+  }>(apiBaseUrl, '/v1/plan/replan', parsedInput, installationId, accessToken);
 
   return weeklyPlanSchema.parse(payload.plan);
 };
@@ -110,12 +118,13 @@ export const validatePlan = async (
   apiBaseUrl: string,
   input: ValidatePlanInput,
   installationId: string,
+  accessToken?: string | null,
 ): Promise<PlanValidation> => {
   const parsedInput = validatePlanInputSchema.parse(input);
   const payload = await postJson<{
     validation: PlanValidation;
     isValid: boolean;
-  }>(apiBaseUrl, '/v1/plan/validate', parsedInput, installationId);
+  }>(apiBaseUrl, '/v1/plan/validate', parsedInput, installationId, accessToken);
 
   return payload.validation;
 };

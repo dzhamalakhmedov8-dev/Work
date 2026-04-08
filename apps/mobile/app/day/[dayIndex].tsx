@@ -59,7 +59,7 @@ export default function DayDetailScreen() {
         {error ? <InfoBanner message={error} tone="danger" /> : null}
         {readOnlyMode ? (
           <InfoBanner
-            message="This day stays visible in read-only mode. Reconnect before you swap meals or regenerate the day."
+            message="This day stays visible in read-only mode. When you try to change it, the app will ask you to sign in before sending the replan."
             tone="warm"
           />
         ) : null}
@@ -85,7 +85,6 @@ export default function DayDetailScreen() {
                 }
                 tone="accent"
                 accessibilityLabel={`Swap ${meal.recipe.title}`}
-                disabled={readOnlyMode}
               />
             </View>
 
@@ -126,22 +125,15 @@ export default function DayDetailScreen() {
             accessibilityLabel={`Regenerate ${day.label}`}
             accessibilityRole="button"
             onPress={() => {
-              if (!readOnlyMode) {
-                router.push(`/modal?scope=day&dayIndex=${day.dayIndex}`);
-              }
+              router.push(`/modal?scope=day&dayIndex=${day.dayIndex}`);
             }}
             style={({ pressed }) => [
               styles.stickyPrimary,
-              (pressed || operations.replanning) && !readOnlyMode ? styles.stickyPrimaryPressed : null,
-              readOnlyMode ? styles.stickyPrimaryDisabled : null,
+              pressed || operations.replanning ? styles.stickyPrimaryPressed : null,
             ]}
           >
             <Text style={styles.stickyPrimaryText}>
-              {readOnlyMode
-                ? 'Reconnect to edit this day'
-                : operations.replanning
-                  ? 'Updating day...'
-                  : 'Regenerate this day'}
+              {operations.replanning ? 'Updating day...' : 'Regenerate this day'}
             </Text>
           </Pressable>
         </View>
@@ -231,9 +223,6 @@ const styles = StyleSheet.create({
   },
   stickyPrimaryPressed: {
     opacity: 0.92,
-  },
-  stickyPrimaryDisabled: {
-    opacity: 0.55,
   },
   stickyPrimaryText: {
     color: colors.white,

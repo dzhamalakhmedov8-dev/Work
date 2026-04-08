@@ -185,6 +185,8 @@ This file preserves the stable context of the current collaboration so we do not
 
 - Preserve conversation context in Markdown files going forward.
 - Avoid mixing unrelated local files into git commits when deploying.
+- Treat `cosmo-check/` as a separate application, not as junk or disposable local clutter.
+- Do not include `cosmo-check/` in Nutrition Planner changes, commits, or deploys unless the user explicitly asks.
 - Keep the app optimized for mobile users first, even when the web export is used for sharing.
 - The external planner API is now expected to use an OpenAI-compatible provider, and the current live key is an OpenRouter key.
 - When LLM planning is enabled, the model should select from the internal meal template catalog only:
@@ -217,3 +219,23 @@ This file preserves the stable context of the current collaboration so we do not
 - Hosted Supabase hardening schema now also exists:
   - `public.user_shopping_checks`
   - RPCs for profile/plan/shopping/workspace sync are now available in `public`
+- `cosmo-check/` remains a separate app with its own Vercel project:
+  - production URL: `https://cosmo-check.vercel.app`
+  - it should not be mixed into Nutrition Planner work unless explicitly requested
+- For Nutrition Planner specifically:
+  - the earlier mention of photo comparison was a user typo
+  - this app does not currently include a photo-comparison feature and that should not be assumed in future nutrition-planner tasks
+- The current required Nutrition Planner auth behavior is now:
+  - onboarding can be completed before auth
+  - auth should appear only when the user triggers the target action, such as generating or replanning
+  - planner/model requests must only reach the backend after the user has an authenticated Supabase session
+  - pending planner actions should survive the auth step and resume automatically after sign-in
+- The current required `cosmo-check` auth behavior is now:
+  - registration/login is triggered by a target action, not upfront
+  - manual comparison and photo comparison both gate the result behind auth
+  - after successful auth, the pending comparison should resume automatically
+  - pending comparison state should survive both OAuth redirects and email-based auth/confirmation flows
+  - backend/model-backed photo analysis should run only for authenticated users
+- `cosmo-check` photo mode depends on the `/api/photo-analyze` availability flag:
+  - when `available: true`, the photo tab should be visible to anonymous users
+  - current production health check for that endpoint reports `available: true`

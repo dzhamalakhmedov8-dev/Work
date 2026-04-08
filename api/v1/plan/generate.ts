@@ -9,6 +9,7 @@ export async function POST(request: Request) {
     return jsonResponse(
       await handleGeneratePlanRequest(body, {
         installationId: request.headers.get('x-installation-id'),
+        authorization: request.headers.get('authorization'),
       }),
     );
   } catch (error) {

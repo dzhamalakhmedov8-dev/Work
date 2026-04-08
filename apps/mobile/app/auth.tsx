@@ -23,7 +23,13 @@ type AuthStage = 'social' | 'sign-in' | 'sign-up' | 'check-email' | 'reconnect';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen() {
-  const { accountStatus, hasLegacyDeviceData, legacyDeviceDataSummary, readOnlyMode } = useAppStore();
+  const {
+    accountStatus,
+    hasLegacyDeviceData,
+    legacyDeviceDataSummary,
+    pendingPlannerActionSummary,
+    readOnlyMode,
+  } = useAppStore();
   const { configured, error, operations, clearError, signIn, signUp, signInWithOAuth } =
     useAuthStore();
   const [stage, setStage] = useState<AuthStage>(readOnlyMode ? 'reconnect' : 'social');
@@ -110,6 +116,14 @@ export default function AuthScreen() {
   };
 
   const heroCopy = (() => {
+    if (pendingPlannerActionSummary && stage !== 'check-email') {
+      return {
+        eyebrow: stage === 'reconnect' ? 'Reconnect' : 'Account',
+        title: pendingPlannerActionSummary.title,
+        subtitle: pendingPlannerActionSummary.message,
+      };
+    }
+
     if (stage === 'reconnect') {
       return {
         eyebrow: 'Reconnect',
@@ -130,8 +144,9 @@ export default function AuthScreen() {
 
     return {
       eyebrow: 'Account',
-      title: 'Sign in before you build and sync your nutrition week.',
+      title: pendingPlannerActionSummary?.title ?? 'Sign in before you build and sync your nutrition week.',
       subtitle:
+        pendingPlannerActionSummary?.message ??
         'Continue with Google, Apple, or email. Supabase Auth keeps one planner workspace tied to one account, while the app still keeps the active week locally for fast access.',
     };
   })();

@@ -19,7 +19,16 @@ export default function RootLayout() {
 
 function AppShell() {
   const segments = useSegments();
-  const { clearToast, operations, readOnlyMode, ready, profile, toast } = useAppStore();
+  const {
+    clearToast,
+    operations,
+    pendingPlannerAction,
+    pendingPlannerActionSummary,
+    readOnlyMode,
+    ready,
+    profile,
+    toast,
+  } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
   const inAuthFlow = String(segments[0] ?? '') === 'auth';
   const inWriteOnlyFlow =
@@ -35,20 +44,26 @@ function AppShell() {
     );
   }
 
-  if (configured && !session && !inAuthFlow && !readOnlyMode) {
-    return <Redirect href={'/auth' as never} />;
-  }
-
   if (configured && !session && readOnlyMode && inWriteOnlyFlow) {
     return <Redirect href={'/auth' as never} />;
   }
 
-  if (configured && session && inAuthFlow && operations.hydratingRemote && !profile) {
+  if (
+    configured &&
+    session &&
+    inAuthFlow &&
+    (operations.hydratingRemote || operations.resumingPendingAction || Boolean(pendingPlannerAction))
+  ) {
     return (
       <View style={styles.loadingShell}>
         <StatusBar style="dark" />
         <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loadingTitle}>Finishing account sync...</Text>
+        <Text style={styles.loadingTitle}>
+          {pendingPlannerActionSummary?.title ?? 'Finishing account sync...'}
+        </Text>
+        {pendingPlannerActionSummary ? (
+          <Text style={styles.loadingCaption}>{pendingPlannerActionSummary.message}</Text>
+        ) : null}
       </View>
     );
   }
@@ -128,6 +143,13 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     fontSize: 16,
     lineHeight: 22,
+    textAlign: 'center',
+  },
+  loadingCaption: {
+    color: colors.inkMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    maxWidth: 320,
     textAlign: 'center',
   },
 });

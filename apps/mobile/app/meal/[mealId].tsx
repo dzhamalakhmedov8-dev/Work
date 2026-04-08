@@ -63,7 +63,7 @@ export default function MealDetailScreen() {
 
         {readOnlyMode ? (
           <InfoBanner
-            message="Recipe details stay visible in read-only mode. Reconnect before you swap this meal."
+            message="Recipe details stay visible in read-only mode. When you request a swap, the app will ask you to sign in before sending it."
             tone="warm"
           />
         ) : null}
@@ -144,21 +144,15 @@ export default function MealDetailScreen() {
         <View style={styles.stickyPrimaryWrap}>
           <PrimaryButton
             label={
-              readOnlyMode
-                ? 'Reconnect to swap this meal'
-                : operations.replanning
-                  ? 'Updating meal...'
-                  : 'Swap this meal'
+              operations.replanning ? 'Updating meal...' : 'Swap this meal'
             }
             onPress={() =>
-              !readOnlyMode
-                ? router.push(
-                    `/modal?scope=meal&dayIndex=${day.dayIndex}&mealSlotId=${meal.id}&slot=${meal.slotType}`,
-                  )
-                : undefined
+              router.push(
+                `/modal?scope=meal&dayIndex=${day.dayIndex}&mealSlotId=${meal.id}&slot=${meal.slotType}`,
+              )
             }
             accessibilityLabel={`Swap ${meal.recipe.title}`}
-            disabled={operations.replanning || readOnlyMode}
+            disabled={operations.replanning}
           />
         </View>
       </StickyActionBar>

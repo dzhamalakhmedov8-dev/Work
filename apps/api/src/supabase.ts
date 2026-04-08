@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { PlanValidation, UserProfile, WeeklyPlan } from '../../../packages/shared/src';
+import { ApiHttpError } from './http';
 
 type PlannerAction = 'generate' | 'replan' | 'validate';
 
@@ -42,6 +43,21 @@ const normalizeInstallationId = (value: string | null | undefined): string | nul
   return trimmed.slice(0, 120);
 };
 
+const normalizeAccessToken = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.toLowerCase().startsWith('bearer ')) {
+    const token = trimmed.slice(7).trim();
+    return token || null;
+  }
+
+  return trimmed;
+};
+
 export const getSupabaseStatus = () => {
   const url = normalizeValue(process.env.SUPABASE_URL);
   const hasServiceRoleKey = Boolean(normalizeValue(process.env.SUPABASE_SERVICE_ROLE_KEY));
@@ -74,6 +90,33 @@ const getSupabaseAdminClient = (): SupabaseClient | null => {
   });
 
   return cachedClient;
+};
+
+export const verifyPlannerAccessToken = async (
+  authorizationHeader?: string | null,
+): Promise<{ userId: string; email: string | null }> => {
+  const accessToken = normalizeAccessToken(authorizationHeader);
+
+  if (!accessToken) {
+    throw new ApiHttpError(401, 'Unauthorized');
+  }
+
+  const client = getSupabaseAdminClient();
+
+  if (!client) {
+    throw new ApiHttpError(503, 'Planner auth is not configured.');
+  }
+
+  const { data, error } = await client.auth.getUser(accessToken);
+
+  if (error || !data.user) {
+    throw new ApiHttpError(401, 'Unauthorized');
+  }
+
+  return {
+    userId: data.user.id,
+    email: data.user.email ?? null,
+  };
 };
 
 export const persistPlannerSnapshot = async (

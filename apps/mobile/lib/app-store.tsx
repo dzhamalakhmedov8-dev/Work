@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -49,6 +50,7 @@ type AppOperationState = {
   generating: boolean;
   replanning: boolean;
   validating: boolean;
+  resumingPendingAction: boolean;
   updatingApiUrl: boolean;
   exporting: boolean;
   importing: boolean;
@@ -98,6 +100,27 @@ type BackupImportPreview = {
   };
 };
 
+type PendingPlannerAction =
+  | {
+      type: 'generate';
+      profile: UserProfile;
+      returnPath?: string | null;
+    }
+  | {
+      type: 'replan';
+      request: ReplanRequest;
+      returnPath?: string | null;
+    }
+  | {
+      type: 'validate';
+      returnPath?: string | null;
+    };
+
+type PendingPlannerActionSummary = {
+  title: string;
+  message: string;
+};
+
 type LocalWorkspace = {
   profile: UserProfile | null;
   currentPlan: WeeklyPlan | null;
@@ -124,10 +147,21 @@ type AppStoreValue = {
   hasLegacyDeviceData: boolean;
   legacyDeviceDataSummary: LegacyWorkspaceSummary | null;
   accountStatus: AccountStatus;
+  pendingPlannerAction: PendingPlannerAction | null;
+  pendingPlannerActionSummary: PendingPlannerActionSummary | null;
   saveProfile: (profile: UserProfile) => Promise<void>;
-  generateWeek: (profileOverride?: UserProfile) => Promise<void>;
-  replanCurrentPlan: (request: ReplanRequest) => Promise<void>;
-  validateCurrentPlan: () => Promise<PlanValidation | null>;
+  generateWeek: (
+    profileOverride?: UserProfile,
+    options?: { returnPath?: string },
+  ) => Promise<void>;
+  replanCurrentPlan: (
+    request: ReplanRequest,
+    options?: { returnPath?: string },
+  ) => Promise<void>;
+  validateCurrentPlan: (options?: {
+    returnPath?: string;
+  }) => Promise<PlanValidation | null>;
+  queueGenerateWeekAfterAuth: (profileOverride: UserProfile, returnPath?: string) => Promise<void>;
   updateApiBaseUrl: (nextUrl: string) => Promise<void>;
   exportBackupFile: () => Promise<string | null>;
   prepareBackupImport: () => Promise<BackupImportPreview | null>;
@@ -151,6 +185,7 @@ const defaultOperations: AppOperationState = {
   generating: false,
   replanning: false,
   validating: false,
+  resumingPendingAction: false,
   updatingApiUrl: false,
   exporting: false,
   importing: false,
@@ -168,6 +203,7 @@ const currentPlanKey = 'currentPlan';
 const planHistoryKey = 'planHistory';
 const shoppingChecksKey = 'shoppingChecks';
 const lastWorkspaceUserIdKey = 'lastWorkspaceUserId';
+const pendingPlannerActionKey = 'pendingPlannerAction';
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
@@ -225,6 +261,89 @@ const safeParseShoppingChecks = (value: unknown): Record<string, boolean> => {
 
     return accumulator;
   }, {});
+};
+
+const safeParsePendingPlannerAction = (value: unknown): PendingPlannerAction | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const returnPath =
+    typeof candidate.returnPath === 'string' && candidate.returnPath.trim().length > 0
+      ? candidate.returnPath.trim()
+      : null;
+
+  if (candidate.type === 'generate') {
+    const parsedProfile = safeParseProfile(candidate.profile);
+    if (!parsedProfile) {
+      return null;
+    }
+
+    return {
+      type: 'generate',
+      profile: parsedProfile,
+      returnPath,
+    };
+  }
+
+  if (candidate.type === 'replan') {
+    const request = candidate.request;
+
+    if (!request || typeof request !== 'object' || Array.isArray(request)) {
+      return null;
+    }
+
+    const parsedRequest = request as Partial<ReplanRequest>;
+    if (
+      parsedRequest.scope !== 'meal' &&
+      parsedRequest.scope !== 'day' &&
+      parsedRequest.scope !== 'week'
+    ) {
+      return null;
+    }
+
+    if (
+      parsedRequest.reason !== 'refresh' &&
+      parsedRequest.reason !== 'skip' &&
+      parsedRequest.reason !== 'dislike' &&
+      parsedRequest.reason !== 'ingredient_unavailable'
+    ) {
+      return null;
+    }
+
+    return {
+      type: 'replan',
+      request: {
+        scope: parsedRequest.scope,
+        reason: parsedRequest.reason,
+        dayIndex:
+          typeof parsedRequest.dayIndex === 'number' ? parsedRequest.dayIndex : undefined,
+        mealSlotId:
+          typeof parsedRequest.mealSlotId === 'string' ? parsedRequest.mealSlotId : undefined,
+        blockedFoods: Array.isArray(parsedRequest.blockedFoods)
+          ? parsedRequest.blockedFoods.filter(
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
+            )
+          : [],
+        preferredCuisines: Array.isArray(parsedRequest.preferredCuisines)
+          ? parsedRequest.preferredCuisines.filter(
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
+            )
+          : [],
+      },
+      returnPath,
+    };
+  }
+
+  if (candidate.type === 'validate') {
+    return {
+      type: 'validate',
+      returnPath,
+    };
+  }
+
+  return null;
 };
 
 const buildShoppingCheckKey = (planId: string, ingredientId: string): string =>
@@ -319,10 +438,40 @@ const summarizeBackupImport = (bundle: ExportBundleV1): BackupImportPreview['sum
   historyCount: bundle.planHistory.length,
 });
 
+const summarizePendingPlannerAction = (
+  action: PendingPlannerAction | null,
+): PendingPlannerActionSummary | null => {
+  if (!action) {
+    return null;
+  }
+
+  if (action.type === 'generate') {
+    return {
+      title: 'Sign in to generate your week',
+      message:
+        'Your profile is ready. After sign-in, the app will save it and send the generation request to the planner.',
+    };
+  }
+
+  if (action.type === 'replan') {
+    return {
+      title: 'Sign in to apply this replan',
+      message:
+        'The replacement request is queued. After sign-in, the planner will continue with this exact replan action.',
+    };
+  }
+
+  return {
+    title: 'Sign in to validate the current plan',
+    message:
+      'Validation is waiting for an authenticated session. After sign-in, the app will continue automatically.',
+  };
+};
+
 const reconnectMessage = 'Reconnect the account before editing or syncing this workspace.';
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
-  const { ready: authReady, user } = useAuthStore();
+  const { ready: authReady, session, user } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [operations, setOperations] = useState<AppOperationState>(defaultOperations);
   const [error, setError] = useState<string | null>(null);
@@ -340,8 +489,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [hasLegacyDeviceData, setHasLegacyDeviceData] = useState(false);
   const [legacyDeviceDataSummary, setLegacyDeviceDataSummary] =
     useState<LegacyWorkspaceSummary | null>(null);
+  const [pendingPlannerAction, setPendingPlannerAction] = useState<PendingPlannerAction | null>(
+    null,
+  );
 
   const activeUserId = user?.id ?? null;
+  const activeAccessToken = session?.access_token ?? null;
   const cloudSyncEnabled = isCloudSyncEnabled() && Boolean(activeUserId);
 
   const busy = useMemo(() => Object.values(operations).some(Boolean), [operations]);
@@ -447,6 +600,26 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     removeKey(scopedDataKey(shoppingChecksKey, userId));
   };
 
+  const clearPendingPlannerActionState = () => {
+    removeKey(pendingPlannerActionKey);
+    setPendingPlannerAction(null);
+  };
+
+  const queuePendingPlannerAction = async (
+    action: PendingPlannerAction,
+    message?: string,
+  ) => {
+    writeJson(pendingPlannerActionKey, action);
+    setPendingPlannerAction(action);
+    setError(null);
+
+    if (message) {
+      showToast(message, 'neutral');
+    }
+
+    router.push('/auth' as never);
+  };
+
   useEffect(() => {
     if (!authReady) {
       return;
@@ -460,6 +633,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
       const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
       const legacyWorkspace = readLegacyWorkspace();
+      const storedPendingPlannerAction = safeParsePendingPlannerAction(
+        readJson<PendingPlannerAction>(pendingPlannerActionKey),
+      );
 
       writeJson(installationIdKey, storedInstallationId);
       writeJson(settingsKey, storedSettings);
@@ -467,6 +643,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setApiBaseUrl(storedSettings.apiBaseUrl);
       setHasLegacyDeviceData(legacyWorkspace.hasAnyData);
       setLegacyDeviceDataSummary(summarizeLegacyWorkspace(legacyWorkspace));
+      setPendingPlannerAction(storedPendingPlannerAction);
       setError(null);
 
       if (!activeUserId) {
@@ -560,11 +737,69 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeUserId, authReady, cloudSyncEnabled]);
 
-  const saveProfile = async (nextProfile: UserProfile) => {
-    if (!requireEditableSession()) {
+  useEffect(() => {
+    if (
+      !authReady ||
+      !ready ||
+      !activeUserId ||
+      !activeAccessToken ||
+      !pendingPlannerAction ||
+      operations.hydratingRemote ||
+      operations.resumingPendingAction
+    ) {
       return;
     }
 
+    let cancelled = false;
+
+    const resumePendingPlannerAction = async () => {
+      setOperation('resumingPendingAction', true);
+      setError(null);
+      let successMessage: string | null = null;
+
+      try {
+        if (pendingPlannerAction.type === 'generate') {
+          await performSaveProfile(pendingPlannerAction.profile);
+          await performGenerateWeek(pendingPlannerAction.profile);
+          successMessage = 'Your week was generated after sign-in.';
+        } else if (pendingPlannerAction.type === 'replan') {
+          await performReplanCurrentPlan(pendingPlannerAction.request);
+          successMessage = 'Your replan was applied after sign-in.';
+        } else {
+          await performValidateCurrentPlan();
+          successMessage = 'Your plan was validated after sign-in.';
+        }
+      } catch {
+        // The underlying action already stores the user-safe error message.
+      } finally {
+        if (!cancelled) {
+          const returnPath = pendingPlannerAction.returnPath ?? '/(tabs)/profile';
+          clearPendingPlannerActionState();
+          setOperation('resumingPendingAction', false);
+          if (successMessage) {
+            showToast(successMessage, 'success');
+          }
+          router.replace(returnPath as never);
+        }
+      }
+    };
+
+    void resumePendingPlannerAction();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeAccessToken,
+    activeUserId,
+    authReady,
+    operations.hydratingRemote,
+    operations.resumingPendingAction,
+    pendingPlannerAction,
+    ready,
+  ]);
+
+  const performSaveProfile = async (nextProfile: UserProfile) => {
     setOperation('savingProfile', true);
     setError(null);
 
@@ -583,12 +818,20 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           setOperation('syncingProfile', false);
         }
       }
-    } catch (nextError) {
+    } catch {
       setError('The profile could not be saved on this device right now.');
       throw new Error('The profile could not be saved on this device right now.');
     } finally {
       setOperation('savingProfile', false);
     }
+  };
+
+  const saveProfile = async (nextProfile: UserProfile) => {
+    if (!requireEditableSession()) {
+      return;
+    }
+
+    await performSaveProfile(nextProfile);
   };
 
   const syncPlansAfterLocalChange = async (
@@ -611,23 +854,17 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const generateWeek = async (profileOverride?: UserProfile) => {
-    if (!requireEditableSession()) {
-      return;
-    }
-
-    const effectiveProfile = profileOverride ?? profile;
-
-    if (!effectiveProfile) {
-      setError('Complete the profile before generating a weekly plan.');
-      return;
-    }
-
+  const performGenerateWeek = async (effectiveProfile: UserProfile) => {
     setOperation('generating', true);
     setError(null);
 
     try {
-      const plan = await generatePlan(apiBaseUrl, effectiveProfile, installationId);
+      const plan = await generatePlan(
+        apiBaseUrl,
+        effectiveProfile,
+        installationId,
+        activeAccessToken,
+      );
       const nextHistory = dedupeHistory(planHistory, plan);
 
       persistPlanLocally(activeUserId!, plan, nextHistory);
@@ -641,11 +878,40 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const replanCurrentPlan = async (request: ReplanRequest) => {
-    if (!requireEditableSession()) {
+  const queueGenerateWeekAfterAuth = async (
+    profileOverride: UserProfile,
+    returnPath?: string,
+  ) => {
+    await queuePendingPlannerAction(
+      {
+        type: 'generate',
+        profile: profileOverride,
+        returnPath: returnPath ?? null,
+      },
+      'Sign in to generate the week from the profile you just confirmed.',
+    );
+  };
+
+  const generateWeek = async (
+    profileOverride?: UserProfile,
+    options?: { returnPath?: string },
+  ) => {
+    const effectiveProfile = profileOverride ?? profile;
+
+    if (!effectiveProfile) {
+      setError('Complete the profile before generating a weekly plan.');
       return;
     }
 
+    if (!activeUserId || !activeAccessToken) {
+      await queueGenerateWeekAfterAuth(effectiveProfile, options?.returnPath);
+      return;
+    }
+
+    await performGenerateWeek(effectiveProfile);
+  };
+
+  const performReplanCurrentPlan = async (request: ReplanRequest) => {
     if (!profile || !currentPlan) {
       setError('Generate a weekly plan before trying to replace meals or days.');
       return;
@@ -663,6 +929,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           request,
         },
         installationId,
+        activeAccessToken,
       );
       const nextHistory = dedupeHistory(planHistory, plan);
 
@@ -677,11 +944,31 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const validateCurrentPlan = async (): Promise<PlanValidation | null> => {
-    if (!requireEditableSession()) {
-      return null;
+  const replanCurrentPlan = async (
+    request: ReplanRequest,
+    options?: { returnPath?: string },
+  ) => {
+    if (!profile || !currentPlan) {
+      setError('Generate a weekly plan before trying to replace meals or days.');
+      return;
     }
 
+    if (!activeUserId || !activeAccessToken) {
+      await queuePendingPlannerAction(
+        {
+          type: 'replan',
+          request,
+          returnPath: options?.returnPath ?? null,
+        },
+        'Sign in to apply this replan request.',
+      );
+      return;
+    }
+
+    await performReplanCurrentPlan(request);
+  };
+
+  const performValidateCurrentPlan = async (): Promise<PlanValidation | null> => {
     if (!profile || !currentPlan) {
       setError('Generate a weekly plan before running validation.');
       return null;
@@ -698,6 +985,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           plan: currentPlan,
         },
         installationId,
+        activeAccessToken,
       );
       const nextPlan = {
         ...currentPlan,
@@ -715,6 +1003,28 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setOperation('validating', false);
     }
+  };
+
+  const validateCurrentPlan = async (
+    options?: { returnPath?: string },
+  ): Promise<PlanValidation | null> => {
+    if (!profile || !currentPlan) {
+      setError('Generate a weekly plan before running validation.');
+      return null;
+    }
+
+    if (!activeUserId || !activeAccessToken) {
+      await queuePendingPlannerAction(
+        {
+          type: 'validate',
+          returnPath: options?.returnPath ?? null,
+        },
+        'Sign in to validate the current plan.',
+      );
+      return null;
+    }
+
+    return performValidateCurrentPlan();
   };
 
   const updateApiBaseUrl = async (nextUrl: string) => {
@@ -1114,6 +1424,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     syncIssue,
   ]);
 
+  const pendingPlannerActionSummary = useMemo(
+    () => summarizePendingPlannerAction(pendingPlannerAction),
+    [pendingPlannerAction],
+  );
+
   return (
     <AppStoreContext.Provider
       value={{
@@ -1134,10 +1449,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         hasLegacyDeviceData,
         legacyDeviceDataSummary,
         accountStatus,
+        pendingPlannerAction,
+        pendingPlannerActionSummary,
         saveProfile,
         generateWeek,
         replanCurrentPlan,
         validateCurrentPlan,
+        queueGenerateWeekAfterAuth,
         updateApiBaseUrl,
         exportBackupFile,
         prepareBackupImport,

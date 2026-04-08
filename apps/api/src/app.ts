@@ -22,6 +22,7 @@ export const createApp = () => {
       response.status(200).json(
         await handleGeneratePlanRequest(request.body, {
           installationId: request.header('x-installation-id'),
+          authorization: request.header('authorization'),
         }),
       );
     } catch (error) {
@@ -35,6 +36,7 @@ export const createApp = () => {
       response.status(200).json(
         await handleReplanPlanRequest(request.body, {
           installationId: request.header('x-installation-id'),
+          authorization: request.header('authorization'),
         }),
       );
     } catch (error) {
@@ -48,6 +50,7 @@ export const createApp = () => {
       response.status(200).json(
         await handleValidatePlanRequest(request.body, {
           installationId: request.header('x-installation-id'),
+          authorization: request.header('authorization'),
         }),
       );
     } catch (error) {

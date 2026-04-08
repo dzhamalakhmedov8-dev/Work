@@ -7,7 +7,7 @@ import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
 
 export default function IndexScreen() {
-  const { operations, readOnlyMode, ready, profile } = useAppStore();
+  const { operations, pendingPlannerAction, readOnlyMode, ready, profile } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
 
   if (!authReady || !ready) {
@@ -23,11 +23,12 @@ export default function IndexScreen() {
     );
   }
 
-  if (configured && !session && !readOnlyMode) {
-    return <Redirect href={'/auth' as never} />;
-  }
-
-  if (configured && session && operations.hydratingRemote && !profile) {
+  if (
+    configured &&
+    session &&
+    (operations.hydratingRemote || operations.resumingPendingAction || Boolean(pendingPlannerAction)) &&
+    !profile
+  ) {
     return (
       <View style={styles.container}>
         <Pill label="Nutrition Planner" tone="accent" />

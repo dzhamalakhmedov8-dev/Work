@@ -1,5 +1,15 @@
 import { ZodError } from 'zod';
 
+export class ApiHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+    this.status = status;
+  }
+}
+
 export const formatError = (error: unknown): { status: number; body: Record<string, unknown> } => {
   if (error instanceof ZodError) {
     return {
@@ -10,6 +20,15 @@ export const formatError = (error: unknown): { status: number; body: Record<stri
           path: issue.path.join('.'),
           message: issue.message,
         })),
+      },
+    };
+  }
+
+  if (error instanceof ApiHttpError) {
+    return {
+      status: error.status,
+      body: {
+        error: error.message,
       },
     };
   }

@@ -175,6 +175,7 @@ export default function OnboardingScreen() {
     error,
     operations,
     profile,
+    queueGenerateWeekAfterAuth,
     ready,
     saveProfile,
     generateWeek,
@@ -270,8 +271,13 @@ export default function OnboardingScreen() {
 
     try {
       clearError();
+      if (!user) {
+        await queueGenerateWeekAfterAuth(previewProfile, '/(tabs)/profile');
+        return;
+      }
+
       await saveProfile(previewProfile);
-      await generateWeek(previewProfile);
+      await generateWeek(previewProfile, { returnPath: '/(tabs)/profile' });
       router.replace('/(tabs)/profile');
     } catch {
       // Error is already stored in the app store and shown inline on this screen.
@@ -616,7 +622,9 @@ export default function OnboardingScreen() {
             label={
               operations.generating || operations.savingProfile
                 ? 'Building your week...'
-                : profile
+                : !user
+                  ? 'Continue to account and generate week'
+                  : profile
                   ? 'Save profile and regenerate week'
                   : 'Create profile and generate week'
             }

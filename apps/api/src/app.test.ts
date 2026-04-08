@@ -1,11 +1,15 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { generateWeeklyPlan, type UserProfile } from '../../../packages/shared/src';
 
 import { createApp } from './app';
+import * as plannerSupabase from './supabase';
 
 const app = createApp();
+const authHeader = {
+  Authorization: 'Bearer test-access-token',
+};
 
 const profile: UserProfile = {
   id: 'api-profile',
@@ -28,6 +32,14 @@ const profile: UserProfile = {
 };
 
 describe('nutrition planner api', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(plannerSupabase, 'verifyPlannerAccessToken').mockResolvedValue({
+      userId: 'test-user',
+      email: 'test@example.com',
+    });
+  });
+
   it('reports supabase status in health', async () => {
     const response = await request(app).get('/health');
 
@@ -37,8 +49,20 @@ describe('nutrition planner api', () => {
     expect(typeof response.body.llm?.enabled).toBe('boolean');
   });
 
-  it('generates a valid weekly plan', async () => {
+  it('rejects planner requests without an authenticated session', async () => {
+    vi.restoreAllMocks();
+
     const response = await request(app).post('/v1/plan/generate').send({ profile });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Unauthorized');
+  });
+
+  it('generates a valid weekly plan', async () => {
+    const response = await request(app)
+      .post('/v1/plan/generate')
+      .set(authHeader)
+      .send({ profile });
 
     expect(response.status).toBe(200);
     expect(response.body.plan.days).toHaveLength(7);
@@ -51,6 +75,7 @@ describe('nutrition planner api', () => {
     const targetMeal = plan.days[0].meals[0];
     const response = await request(app)
       .post('/v1/plan/replan')
+      .set(authHeader)
       .send({
         profile,
         currentPlan: plan,
@@ -88,6 +113,7 @@ describe('nutrition planner api', () => {
 
     const response = await request(app)
       .post('/v1/plan/validate')
+      .set(authHeader)
       .send({ profile, plan });
 
     expect(response.status).toBe(200);

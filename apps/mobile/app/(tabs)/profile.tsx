@@ -272,8 +272,8 @@ export default function ProfileScreen() {
           <View style={styles.actionStack}>
             <PrimaryButton
               label={operations.generating ? 'Generating week...' : 'Generate fresh week'}
-              onPress={() => generateWeek()}
-              disabled={operations.generating || readOnlyMode}
+              onPress={() => generateWeek(undefined, { returnPath: '/(tabs)/profile' })}
+              disabled={operations.generating}
             />
             <SecondaryButton label="Open app settings" onPress={() => router.push('/settings')} />
           </View>

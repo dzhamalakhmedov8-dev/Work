@@ -305,3 +305,53 @@
   - `npm run typecheck`
   - `npm test`
   - `npm run vercel-build`
+- Worked on the separate `cosmo-check/` application without mixing it into Nutrition Planner.
+- Investigated the registration + photo-comparison complaint from the user's Telegram notes:
+  - found that manual comparison still bypassed auth on the frontend
+  - confirmed backend photo analysis in `cosmo-check/api/photo-analyze.ts` was already auth-gated
+  - verified production `/api/photo-analyze` currently reports `{"available":true,"requiresAuth":true}`
+- Updated `cosmo-check/js/app.js` so the app now:
+  - stores a generic pending post-auth draft instead of a photo-only draft
+  - resumes either `photo-analysis` or `manual-analysis` automatically after sign-in
+  - gates manual comparison behind auth, matching the existing photo flow
+  - keeps the CTA wording aligned with the new behavior: action first, auth second, result after auth
+- Verified `cosmo-check/js/app.js` syntax with:
+  - `node --check cosmo-check/js/app.js`
+- Deployed the updated `cosmo-check` frontend directly with Vercel CLI:
+  - deployment URL: `https://cosmo-check-ec6bbjjhc-dzhamalakhmedov8-devs-projects.vercel.app`
+  - aliased production URL: `https://cosmo-check.vercel.app`
+- Verified after deploy:
+  - `https://cosmo-check.vercel.app` returns `200`
+  - `https://cosmo-check.vercel.app/js/app.js` contains the new `manual-analysis` resume flow
+  - `https://cosmo-check.vercel.app/api/photo-analyze` returns `available: true`
+- Continued the same `cosmo-check` registration task to cover the email-confirmation edge case:
+  - pending compare drafts are now also persisted before email sign-up and email sign-in
+  - this prevents the target action from being lost if the user confirms email and comes back later
+- Re-ran syntax validation:
+  - `node --check cosmo-check/js/app.js`
+- Re-deployed `cosmo-check` production after the email-flow hardening:
+  - deployment URL: `https://cosmo-check-i34x6jqed-dzhamalakhmedov8-devs-projects.vercel.app`
+  - aliased production URL remains: `https://cosmo-check.vercel.app`
+- Verified on the live bundle that the login flow now also persists the pending action before auth:
+  - production `js/app.js` contains the `persistPendingAnalyzeDraft()` call inside `handleAuthLogin()`
+- Returned to Nutrition Planner to mirror the same “action first, auth second” behavior described in the user's Telegram notes.
+- Confirmed an important scope clarification from the user:
+  - Nutrition Planner does not have a photo-comparison feature
+  - the earlier “photo comparison disappeared” note was a typo and should be ignored for this app
+- Updated Nutrition Planner frontend auth flow:
+  - removed the early forced redirect to `/auth` for fresh anonymous users
+  - onboarding now allows the user to finish the setup first
+  - pressing the target action (`generate`, `replan`, or `validate`) now stores a pending planner action and routes to `/auth`
+  - after successful sign-in, the pending planner action resumes automatically and routes the user back into the app
+- Updated Nutrition Planner API auth flow:
+  - mobile planner requests now send `Authorization: Bearer <access_token>`
+  - planner endpoints now verify Supabase access tokens before generation, replanning, or validation
+  - unauthenticated planner requests now return `401 Unauthorized`
+- Updated UI affordances around the new flow:
+  - onboarding review button now makes it clear that anonymous users continue into account auth before generation
+  - auth screen now explains the pending requested action
+  - week/profile/day/meal/modal/settings flows no longer block too early and instead defer auth until the action is actually requested
+- Verified after the Nutrition Planner auth-gating refactor:
+  - `npm.cmd run typecheck`
+  - `npm.cmd test`
+  - `npm.cmd run vercel-build`

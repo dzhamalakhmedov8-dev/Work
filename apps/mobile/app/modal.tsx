@@ -58,9 +58,14 @@ export default function ReplanModalScreen() {
         preferredCuisines: preferredCuisines
           .map((item) => item.trim())
           .filter(Boolean),
-      });
-      showToast(scope === 'meal' ? 'Meal replaced in the active plan.' : 'Plan updated.', 'success');
-      router.back();
+      }, { returnPath: '/(tabs)/week' });
+      if (!readOnlyMode) {
+        showToast(
+          scope === 'meal' ? 'Meal replaced in the active plan.' : 'Plan updated.',
+          'success',
+        );
+        router.back();
+      }
     } catch {
       // Error is already stored in the global app store and rendered inline below.
     }
@@ -82,7 +87,7 @@ export default function ReplanModalScreen() {
         {error ? <InfoBanner message={error} tone="danger" /> : null}
         {readOnlyMode ? (
           <InfoBanner
-            message="Reconnect the account before you replace meals or regenerate part of the plan."
+            message="You can keep this request. The app will ask you to sign in on the next step before it sends the replan."
             tone="warm"
           />
         ) : null}
@@ -134,7 +139,7 @@ export default function ReplanModalScreen() {
           <PrimaryButton
             label={operations.replanning ? 'Applying replan...' : 'Apply replan'}
             onPress={applyReplan}
-            disabled={operations.replanning || readOnlyMode}
+            disabled={operations.replanning}
           />
           <SecondaryButton
             label="Cancel"

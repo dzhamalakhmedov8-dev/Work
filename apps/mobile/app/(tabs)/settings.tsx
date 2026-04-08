@@ -73,7 +73,7 @@ export default function SettingsScreen() {
       return;
     }
 
-    const validation = await validateCurrentPlan();
+    const validation = await validateCurrentPlan({ returnPath: '/settings' });
     if (!validation) {
       return;
     }
@@ -223,7 +223,7 @@ export default function SettingsScreen() {
           <SecondaryButton
             label={operations.validating ? 'Validating...' : 'Validate current plan'}
             onPress={validate}
-            disabled={operations.validating || readOnlyMode}
+            disabled={operations.validating}
           />
           <SecondaryButton
             label={operations.exporting ? 'Exporting...' : 'Export JSON backup'}

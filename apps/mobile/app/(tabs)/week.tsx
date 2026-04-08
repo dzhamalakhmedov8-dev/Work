@@ -79,6 +79,12 @@ export default function WeekScreen() {
         />
 
         {error ? <InfoBanner message={error} tone="danger" /> : null}
+        {readOnlyMode ? (
+          <InfoBanner
+            message="You can still request a new week or a replan now. The app will ask you to sign in right before it sends the planner request."
+            tone="warm"
+          />
+        ) : null}
 
         {currentPlan ? <ValidationStatusCard validation={currentPlan.validation} /> : null}
 
@@ -93,15 +99,15 @@ export default function WeekScreen() {
             }
             onPress={() => {
               clearError();
-              return generateWeek();
+              return generateWeek(undefined, { returnPath: '/(tabs)/week' });
             }}
-            disabled={operations.generating || readOnlyMode}
+            disabled={operations.generating}
           />
           {currentPlan ? (
             <SecondaryButton
               label="Replan week"
               onPress={() => router.push('/modal?scope=week')}
-              disabled={operations.generating || operations.replanning || readOnlyMode}
+              disabled={operations.generating || operations.replanning}
             />
           ) : null}
         </View>

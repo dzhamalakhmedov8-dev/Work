@@ -10,17 +10,18 @@ import {
   replanWithStrategy,
   validatePlanInput,
 } from './plan-service';
-import { getSupabaseStatus, persistPlannerSnapshot } from './supabase';
+import * as plannerSupabase from './supabase';
 
 type RequestContext = {
   installationId?: string | null;
+  authorization?: string | null;
 };
 
 export const getHealthPayload = () => ({
   ok: true,
   service: '@nutrition-planner/api',
   now: new Date().toISOString(),
-  supabase: getSupabaseStatus(),
+  supabase: plannerSupabase.getSupabaseStatus(),
   llm: getLlmStatus(),
 });
 
@@ -28,6 +29,7 @@ export const handleGeneratePlanRequest = async (
   body: unknown,
   context: RequestContext = {},
 ) => {
+  await plannerSupabase.verifyPlannerAccessToken(context.authorization);
   const input = generatePlanInputSchema.parse(body);
   const result = await generatePlanWithStrategy(input.profile);
 
@@ -35,7 +37,7 @@ export const handleGeneratePlanRequest = async (
     plan: result.plan,
     validation: result.plan.validation,
   };
-  const persistence = await persistPlannerSnapshot({
+  const persistence = await plannerSupabase.persistPlannerSnapshot({
     action: 'generate',
     installationId: context.installationId,
     profile: input.profile,
@@ -61,6 +63,7 @@ export const handleReplanPlanRequest = async (
   body: unknown,
   context: RequestContext = {},
 ) => {
+  await plannerSupabase.verifyPlannerAccessToken(context.authorization);
   const input = replanPlanInputSchema.parse(body);
   const result = await replanWithStrategy(input);
 
@@ -68,7 +71,7 @@ export const handleReplanPlanRequest = async (
     plan: result.plan,
     validation: result.plan.validation,
   };
-  const persistence = await persistPlannerSnapshot({
+  const persistence = await plannerSupabase.persistPlannerSnapshot({
     action: 'replan',
     installationId: context.installationId,
     profile: input.profile,
@@ -92,10 +95,11 @@ export const handleValidatePlanRequest = async (
   body: unknown,
   context: RequestContext = {},
 ) => {
+  await plannerSupabase.verifyPlannerAccessToken(context.authorization);
   const input = validatePlanInputSchema.parse(body);
   const result = validatePlanInput(input);
 
-  const persistence = await persistPlannerSnapshot({
+  const persistence = await plannerSupabase.persistPlannerSnapshot({
     action: 'validate',
     installationId: context.installationId,
     profile: input.profile,
