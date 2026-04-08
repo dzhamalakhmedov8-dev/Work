@@ -31,6 +31,7 @@ function AppShell() {
   } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
   const inAuthFlow = String(segments[0] ?? '') === 'auth';
+  const inOnboardingFlow = String(segments[0] ?? '') === 'onboarding';
   const inWriteOnlyFlow =
     String(segments[0] ?? '') === 'onboarding' || String(segments[0] ?? '') === 'modal';
 
@@ -46,6 +47,10 @@ function AppShell() {
 
   if (configured && !session && readOnlyMode && inWriteOnlyFlow) {
     return <Redirect href={'/auth' as never} />;
+  }
+
+  if (configured && !session && !profile && !readOnlyMode && !inAuthFlow && !inOnboardingFlow) {
+    return <Redirect href={'/onboarding' as never} />;
   }
 
   if (

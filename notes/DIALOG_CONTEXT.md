@@ -230,6 +230,7 @@ This file preserves the stable context of the current collaboration so we do not
   - auth should appear only when the user triggers the target action, such as generating or replanning
   - planner/model requests must only reach the backend after the user has an authenticated Supabase session
   - pending planner actions should survive the auth step and resume automatically after sign-in
+  - signed-out visitors should see the default empty start state, not the last locally filled workspace
 - The current required `cosmo-check` auth behavior is now:
   - registration/login is triggered by a target action, not upfront
   - manual comparison and photo comparison both gate the result behind auth

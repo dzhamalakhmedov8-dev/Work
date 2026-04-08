@@ -355,3 +355,9 @@
   - `npm.cmd run typecheck`
   - `npm.cmd test`
   - `npm.cmd run vercel-build`
+- Tightened the signed-out public experience for Nutrition Planner:
+  - removed bootstrap fallback that restored the last scoped local workspace when there is no active session
+  - added a redirect so signed-out users who hit routes like `/profile` land on the default onboarding screen instead of an old filled workspace
+- Re-verified after the public-default-state change:
+  - `npm.cmd run typecheck`
+  - `npm.cmd run vercel-build`

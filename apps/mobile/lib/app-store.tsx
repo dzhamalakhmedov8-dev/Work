@@ -647,28 +647,18 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setError(null);
 
       if (!activeUserId) {
-        const lastWorkspaceUserId = readJson<string>(lastWorkspaceUserIdKey);
-        const fallbackWorkspace =
-          typeof lastWorkspaceUserId === 'string' && lastWorkspaceUserId.trim().length > 0
-            ? readLocalWorkspace(lastWorkspaceUserId)
-            : null;
-
-        if (fallbackWorkspace?.hasAnyData && lastWorkspaceUserId) {
-          applyWorkspaceToState(lastWorkspaceUserId, fallbackWorkspace, true);
-        } else {
-          applyWorkspaceToState(
-            null,
-            {
-              profile: null,
-              currentPlan: null,
-              planHistory: [],
-              shoppingChecks: {},
-              hasAnyData: false,
-            },
-            false,
-          );
-          setLastCloudInstallationId(null);
-        }
+        applyWorkspaceToState(
+          null,
+          {
+            profile: null,
+            currentPlan: null,
+            planHistory: [],
+            shoppingChecks: {},
+            hasAnyData: false,
+          },
+          false,
+        );
+        setLastCloudInstallationId(null);
 
         setReady(true);
         return;
