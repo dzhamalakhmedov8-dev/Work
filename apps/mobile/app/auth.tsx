@@ -32,7 +32,10 @@ export default function AuthScreen() {
   } = useAppStore();
   const { configured, error, operations, clearError, signIn, signUp, signInWithOAuth } =
     useAuthStore();
-  const [stage, setStage] = useState<AuthStage>(readOnlyMode ? 'reconnect' : 'social');
+  const hasPendingPlannerAction = Boolean(pendingPlannerActionSummary);
+  const [stage, setStage] = useState<AuthStage>(
+    hasPendingPlannerAction ? 'social' : readOnlyMode ? 'reconnect' : 'social',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -42,8 +45,8 @@ export default function AuthScreen() {
   } | null>(null);
 
   useEffect(() => {
-    setStage(readOnlyMode ? 'reconnect' : 'social');
-  }, [readOnlyMode]);
+    setStage(hasPendingPlannerAction ? 'social' : readOnlyMode ? 'reconnect' : 'social');
+  }, [hasPendingPlannerAction, readOnlyMode]);
 
   const validationMessage = useMemo(() => {
     if (stage !== 'sign-in' && stage !== 'sign-up') {
@@ -163,7 +166,7 @@ export default function AuthScreen() {
           tone={stage === 'check-email' ? 'warm' : 'accent'}
         />
 
-        {(stage === 'reconnect' || readOnlyMode) && (
+        {!hasPendingPlannerAction && (stage === 'reconnect' || readOnlyMode) && (
           <AccountStateBanner
             title={accountStatus.title}
             message={accountStatus.message}
@@ -181,7 +184,7 @@ export default function AuthScreen() {
         {message ? <InfoBanner message={message.text} tone={message.tone} /> : null}
         {error ? <InfoBanner message={error} tone="danger" /> : null}
 
-        {hasLegacyDeviceData ? (
+        {hasLegacyDeviceData && !hasPendingPlannerAction ? (
           <ScreenCard tone="warm">
             <SectionTitle
               eyebrow="Previous device data"
