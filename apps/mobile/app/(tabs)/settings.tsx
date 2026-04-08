@@ -22,11 +22,13 @@ export default function SettingsScreen() {
   const { operations: authOperations, signOut, user } = useAuthStore();
   const {
     apiBaseUrl,
+    cloudSyncEnabled,
     currentPlan,
     error,
     exportBackupFile,
     importBackupFile,
     installationId,
+    lastCloudInstallationId,
     operations,
     resetAllData,
     showToast,
@@ -76,19 +78,29 @@ export default function SettingsScreen() {
   const importBackup = async () => {
     const imported = await importBackupFile();
     if (imported) {
-      showToast('Backup imported into local storage.', 'success');
+      showToast(
+        cloudSyncEnabled
+          ? 'Backup imported locally and queued for cloud sync.'
+          : 'Backup imported into local storage.',
+        'success',
+      );
     }
   };
 
   const reset = async () => {
-    Alert.alert('Reset all local data', 'This will remove the profile, weekly plan, history, and shopping checklist from this device.', [
+    Alert.alert('Reset planner data', 'This will remove the profile, weekly plan, history, and shopping checklist from this device. If cloud sync is active, the account workspace will be cleared too.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
         style: 'destructive',
         onPress: () => {
           void resetAllData().then(() => {
-            showToast('Local planner data was reset on this device.', 'success');
+            showToast(
+              cloudSyncEnabled
+                ? 'Planner data was reset on this device and in the linked account workspace.'
+                : 'Planner data was reset on this device.',
+              'success',
+            );
           });
         },
       },
@@ -101,7 +113,7 @@ export default function SettingsScreen() {
         <HeroPanel
           eyebrow="Settings"
           title="Backups, validation, and device-level controls."
-          subtitle="Everything here is local-first. Use this screen to validate the active week, move data between devices, or debug a development build."
+          subtitle="Use this screen to validate the active week, move data between devices, and check whether the signed-in account is syncing with the shared workspace."
           tone="base"
         />
 
@@ -114,8 +126,23 @@ export default function SettingsScreen() {
           <SectionTitle
             eyebrow="Account"
             title={user?.email ?? 'Signed-in account'}
-            subtitle="Supabase Auth controls who can open this planner workspace on the device."
+            subtitle="Supabase Auth controls access, and the planner workspace can now sync profile and plan data through the database."
           />
+          <View style={styles.statusRow}>
+            <Pill
+              label={cloudSyncEnabled ? 'Cloud sync active' : 'Cloud sync unavailable'}
+              tone={cloudSyncEnabled ? 'success' : 'warm'}
+            />
+            {operations.hydratingRemote ? <Pill label="Hydrating account" tone="warm" /> : null}
+            {operations.syncingProfile || operations.syncingPlan || operations.syncingShopping ? (
+              <Pill label="Syncing changes" tone="accent" />
+            ) : null}
+          </View>
+          {lastCloudInstallationId ? (
+            <Text style={styles.helperText}>
+              Last synced installation: {lastCloudInstallationId}
+            </Text>
+          ) : null}
           <SecondaryButton
             label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}
             onPress={() => signOut()}
@@ -149,8 +176,8 @@ export default function SettingsScreen() {
         <ScreenCard tone="warm">
           <SectionTitle
             eyebrow="Danger zone"
-            title="Reset local planner data"
-            subtitle="This clears the stored profile, active plan, plan history, and shopping checklist from this device."
+            title="Reset planner data"
+            subtitle="This clears the stored profile, active plan, plan history, and shopping checklist from this device and also clears the signed-in account workspace when cloud sync is active."
           />
           <PrimaryButton
             label={operations.resetting ? 'Resetting...' : 'Reset local data'}
@@ -195,7 +222,7 @@ export default function SettingsScreen() {
               <SectionTitle
                 eyebrow="Supabase"
                 title="Public client config"
-                subtitle="The mobile app reads these values from Expo public env variables. Server-side sync uses the API's private service-role token."
+                subtitle="The mobile app reads these values from Expo public env variables for auth and user-scoped sync. The planner API still uses the private service-role token for server-side persistence."
               />
               <View style={styles.statusRow}>
                 <Pill
@@ -214,7 +241,7 @@ export default function SettingsScreen() {
                   : 'Missing EXPO_PUBLIC_SUPABASE_ANON_KEY'}
               </Text>
               <Text style={styles.helperText}>
-                For API-side persistence, also set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the server or Vercel environment.
+                For planner API persistence, also set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the server or Vercel environment.
               </Text>
             </ScreenCard>
           </>

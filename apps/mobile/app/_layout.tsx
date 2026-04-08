@@ -19,7 +19,7 @@ export default function RootLayout() {
 
 function AppShell() {
   const segments = useSegments();
-  const { clearToast, ready, profile, toast } = useAppStore();
+  const { clearToast, operations, ready, profile, toast } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
   const inAuthFlow = String(segments[0] ?? '') === 'auth';
 
@@ -35,6 +35,16 @@ function AppShell() {
 
   if (configured && !session && !inAuthFlow) {
     return <Redirect href={'/auth' as never} />;
+  }
+
+  if (configured && session && inAuthFlow && operations.hydratingRemote && !profile) {
+    return (
+      <View style={styles.loadingShell}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={styles.loadingTitle}>Finishing account sync...</Text>
+      </View>
+    );
   }
 
   if (configured && session && inAuthFlow) {

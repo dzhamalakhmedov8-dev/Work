@@ -26,7 +26,14 @@ import {
 import { colors, spacing } from '../../theme';
 
 export default function ProfileScreen() {
-  const { currentPlan, generateWeek, operations, profile } = useAppStore();
+  const {
+    cloudSyncEnabled,
+    currentPlan,
+    generateWeek,
+    lastCloudInstallationId,
+    operations,
+    profile,
+  } = useAppStore();
   const { operations: authOperations, signOut, user } = useAuthStore();
 
   if (!profile) {
@@ -71,8 +78,16 @@ export default function ProfileScreen() {
           <SectionTitle
             eyebrow="Account"
             title={user?.email ?? 'Signed-in account'}
-            subtitle="This profile and planner state now live behind Supabase Auth on this device."
+            subtitle="This account now uses Supabase Auth, while the nutrition profile and active plan can sync through the shared database."
           />
+          <View style={styles.heroPills}>
+            <Pill
+              label={cloudSyncEnabled ? 'Cloud sync active' : 'Local-only mode'}
+              tone={cloudSyncEnabled ? 'success' : 'warm'}
+            />
+            {operations.hydratingRemote ? <Pill label="Syncing account..." tone="warm" /> : null}
+            {lastCloudInstallationId ? <Pill label="Cloud workspace linked" tone="accent" /> : null}
+          </View>
           <View style={styles.actionStack}>
             <SecondaryButton
               label={authOperations.signingOut ? 'Signing out...' : 'Sign out'}

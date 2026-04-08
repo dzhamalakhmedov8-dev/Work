@@ -7,7 +7,7 @@ import { useAuthStore } from '../lib/auth-store';
 import { colors, spacing } from '../theme';
 
 export default function IndexScreen() {
-  const { ready, profile } = useAppStore();
+  const { operations, ready, profile } = useAppStore();
   const { configured, ready: authReady, session } = useAuthStore();
 
   if (!authReady || !ready) {
@@ -25,6 +25,19 @@ export default function IndexScreen() {
 
   if (configured && !session) {
     return <Redirect href={'/auth' as never} />;
+  }
+
+  if (configured && session && operations.hydratingRemote && !profile) {
+    return (
+      <View style={styles.container}>
+        <Pill label="Nutrition Planner" tone="accent" />
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={styles.title}>Finishing account sync...</Text>
+        <Text style={styles.subtitle}>
+          Loading your cloud profile, current plan, and shopping progress before we choose the next screen.
+        </Text>
+      </View>
+    );
   }
 
   if (!profile) {

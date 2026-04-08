@@ -194,3 +194,8 @@ This file preserves the stable context of the current collaboration so we do not
   - Google OAuth
   - Apple OAuth
   - email/password fallback
+- The current auth + sync direction is now:
+  - `Supabase Auth` remains the identity source
+  - one signed-in account owns one nutrition workspace
+  - the mobile app keeps a local cache for fast reads
+  - the signed-in workspace syncs profile, plans, and shopping checks to Supabase `public` tables through RLS

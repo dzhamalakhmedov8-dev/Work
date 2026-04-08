@@ -15,6 +15,15 @@ import {
 } from '@nutrition-planner/shared';
 
 import {
+  cloudSyncEnabled as isCloudSyncEnabled,
+  deleteCloudWorkspace,
+  loadCloudWorkspace,
+  pushLocalWorkspaceToCloud,
+  saveCloudShoppingChecks,
+  syncCloudPlans,
+  upsertCloudProfile,
+} from './cloud-sync';
+import {
   generatePlan,
   getDefaultApiUrl,
   replanPlan,
@@ -37,6 +46,10 @@ type AppOperationState = {
   exporting: boolean;
   importing: boolean;
   resetting: boolean;
+  hydratingRemote: boolean;
+  syncingProfile: boolean;
+  syncingPlan: boolean;
+  syncingShopping: boolean;
 };
 
 type ToastState = {
@@ -57,6 +70,8 @@ type AppStoreValue = {
   currentPlan: WeeklyPlan | null;
   planHistory: WeeklyPlan[];
   shoppingChecks: Record<string, boolean>;
+  cloudSyncEnabled: boolean;
+  lastCloudInstallationId: string | null;
   saveProfile: (profile: UserProfile) => Promise<void>;
   generateWeek: (profileOverride?: UserProfile) => Promise<void>;
   replanCurrentPlan: (request: ReplanRequest) => Promise<void>;
@@ -85,6 +100,10 @@ const defaultOperations: AppOperationState = {
   exporting: false,
   importing: false,
   resetting: false,
+  hydratingRemote: false,
+  syncingProfile: false,
+  syncingPlan: false,
+  syncingShopping: false,
 };
 
 const installationIdKey = 'installationId';
@@ -157,6 +176,20 @@ const buildShoppingCheckKey = (planId: string, ingredientId: string): string =>
 
 const scopedDataKey = (baseKey: string, userId: string): string => `user:${userId}:${baseKey}`;
 
+const writeOrRemoveJson = (key: string, value: unknown): void => {
+  if (
+    value === null ||
+    value === undefined ||
+    (Array.isArray(value) && value.length === 0) ||
+    (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0)
+  ) {
+    removeKey(key);
+    return;
+  }
+
+  writeJson(key, value);
+};
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const { ready: authReady, user } = useAuthStore();
   const [ready, setReady] = useState(false);
@@ -169,86 +202,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [currentPlan, setCurrentPlan] = useState<WeeklyPlan | null>(null);
   const [planHistory, setPlanHistory] = useState<WeeklyPlan[]>([]);
   const [shoppingChecks, setShoppingChecks] = useState<Record<string, boolean>>({});
+  const [lastCloudInstallationId, setLastCloudInstallationId] = useState<string | null>(null);
   const activeUserId = user?.id ?? null;
-
-  useEffect(() => {
-    if (!authReady) {
-      return;
-    }
-
-    setReady(false);
-    const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
-    const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
-
-    writeJson(installationIdKey, storedInstallationId);
-    writeJson(settingsKey, storedSettings);
-    setInstallationId(storedInstallationId);
-    setApiBaseUrl(storedSettings.apiBaseUrl);
-
-    if (!activeUserId) {
-      setProfile(null);
-      setCurrentPlan(null);
-      setPlanHistory([]);
-      setShoppingChecks({});
-      setError(null);
-      setReady(true);
-      return;
-    }
-
-    const scopedProfileKey = scopedDataKey(profileKey, activeUserId);
-    const scopedCurrentPlanKey = scopedDataKey(currentPlanKey, activeUserId);
-    const scopedPlanHistoryKey = scopedDataKey(planHistoryKey, activeUserId);
-    const scopedShoppingChecksKey = scopedDataKey(shoppingChecksKey, activeUserId);
-
-    const rawScopedProfile = readJson<UserProfile>(scopedProfileKey);
-    const rawScopedCurrentPlan = readJson<WeeklyPlan>(scopedCurrentPlanKey);
-    const rawScopedPlanHistory = readJson<WeeklyPlan[]>(scopedPlanHistoryKey);
-    const rawScopedShoppingChecks = readJson<Record<string, boolean>>(scopedShoppingChecksKey);
-
-    const profileFallback = safeParseProfile(readJson<UserProfile>(profileKey));
-    const currentPlanFallback = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
-    const planHistoryFallback = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
-    const shoppingChecksFallback = safeParseShoppingChecks(
-      readJson<Record<string, boolean>>(shoppingChecksKey),
-    );
-
-    const storedProfile = safeParseProfile(rawScopedProfile) ?? profileFallback;
-    const storedCurrentPlan = safeParsePlan(rawScopedCurrentPlan) ?? currentPlanFallback;
-    const storedPlanHistory =
-      rawScopedPlanHistory !== null
-        ? safeParsePlanHistory(rawScopedPlanHistory)
-        : planHistoryFallback;
-    const storedShoppingChecks =
-      rawScopedShoppingChecks !== null
-        ? safeParseShoppingChecks(rawScopedShoppingChecks)
-        : shoppingChecksFallback;
-
-    if (storedProfile && !readJson<UserProfile>(scopedProfileKey)) {
-      writeJson(scopedProfileKey, storedProfile);
-    }
-
-    if (storedCurrentPlan && !readJson<WeeklyPlan>(scopedCurrentPlanKey)) {
-      writeJson(scopedCurrentPlanKey, storedCurrentPlan);
-    }
-
-    if (storedPlanHistory.length > 0 && !readJson<WeeklyPlan[]>(scopedPlanHistoryKey)) {
-      writeJson(scopedPlanHistoryKey, storedPlanHistory);
-    }
-
-    if (
-      Object.keys(storedShoppingChecks).length > 0 &&
-      !readJson<Record<string, boolean>>(scopedShoppingChecksKey)
-    ) {
-      writeJson(scopedShoppingChecksKey, storedShoppingChecks);
-    }
-
-    setProfile(storedProfile);
-    setCurrentPlan(storedCurrentPlan);
-    setPlanHistory(storedPlanHistory);
-    setShoppingChecks(storedShoppingChecks);
-    setError(null);
-    setReady(true);
-  }, [activeUserId, authReady]);
+  const cloudSyncEnabled = isCloudSyncEnabled() && Boolean(activeUserId);
 
   const busy = useMemo(() => Object.values(operations).some(Boolean), [operations]);
 
@@ -275,6 +231,178 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setToast(null);
   };
 
+  const persistProfileLocally = (userId: string, nextProfile: UserProfile | null) => {
+    writeOrRemoveJson(scopedDataKey(profileKey, userId), nextProfile);
+    setProfile(nextProfile);
+  };
+
+  const persistPlanLocally = (
+    userId: string,
+    nextPlan: WeeklyPlan | null,
+    nextHistory: WeeklyPlan[],
+  ) => {
+    writeOrRemoveJson(scopedDataKey(currentPlanKey, userId), nextPlan);
+    writeOrRemoveJson(scopedDataKey(planHistoryKey, userId), nextHistory);
+    setCurrentPlan(nextPlan);
+    setPlanHistory(nextHistory);
+  };
+
+  const persistShoppingChecksLocally = (userId: string, nextShoppingChecks: Record<string, boolean>) => {
+    writeOrRemoveJson(scopedDataKey(shoppingChecksKey, userId), nextShoppingChecks);
+    setShoppingChecks(nextShoppingChecks);
+  };
+
+  const handleSyncFailure = (fallbackMessage: string, nextError: unknown) => {
+    const message = nextError instanceof Error ? nextError.message : fallbackMessage;
+    setError(message);
+    showToast(message, 'danger');
+  };
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      setReady(false);
+      const storedInstallationId = readJson<string>(installationIdKey) ?? createInstallationId();
+      const storedSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
+
+      writeJson(installationIdKey, storedInstallationId);
+      writeJson(settingsKey, storedSettings);
+      setInstallationId(storedInstallationId);
+      setApiBaseUrl(storedSettings.apiBaseUrl);
+
+      if (!activeUserId) {
+        setProfile(null);
+        setCurrentPlan(null);
+        setPlanHistory([]);
+        setShoppingChecks({});
+        setLastCloudInstallationId(null);
+        setError(null);
+        setReady(true);
+        return;
+      }
+
+      const scopedProfileStorageKey = scopedDataKey(profileKey, activeUserId);
+      const scopedCurrentPlanStorageKey = scopedDataKey(currentPlanKey, activeUserId);
+      const scopedPlanHistoryStorageKey = scopedDataKey(planHistoryKey, activeUserId);
+      const scopedShoppingChecksStorageKey = scopedDataKey(shoppingChecksKey, activeUserId);
+
+      const rawScopedProfile = readJson<UserProfile>(scopedProfileStorageKey);
+      const rawScopedCurrentPlan = readJson<WeeklyPlan>(scopedCurrentPlanStorageKey);
+      const rawScopedPlanHistory = readJson<WeeklyPlan[]>(scopedPlanHistoryStorageKey);
+      const rawScopedShoppingChecks = readJson<Record<string, boolean>>(scopedShoppingChecksStorageKey);
+
+      const profileFallback = safeParseProfile(readJson<UserProfile>(profileKey));
+      const currentPlanFallback = safeParsePlan(readJson<WeeklyPlan>(currentPlanKey));
+      const planHistoryFallback = safeParsePlanHistory(readJson<WeeklyPlan[]>(planHistoryKey));
+      const shoppingChecksFallback = safeParseShoppingChecks(
+        readJson<Record<string, boolean>>(shoppingChecksKey),
+      );
+
+      const localProfile = safeParseProfile(rawScopedProfile) ?? profileFallback;
+      const localCurrentPlan = safeParsePlan(rawScopedCurrentPlan) ?? currentPlanFallback;
+      const localPlanHistory =
+        rawScopedPlanHistory !== null
+          ? safeParsePlanHistory(rawScopedPlanHistory)
+          : planHistoryFallback;
+      const localShoppingChecks =
+        rawScopedShoppingChecks !== null
+          ? safeParseShoppingChecks(rawScopedShoppingChecks)
+          : shoppingChecksFallback;
+
+      if (localProfile && !readJson<UserProfile>(scopedProfileStorageKey)) {
+        writeJson(scopedProfileStorageKey, localProfile);
+      }
+
+      if (localCurrentPlan && !readJson<WeeklyPlan>(scopedCurrentPlanStorageKey)) {
+        writeJson(scopedCurrentPlanStorageKey, localCurrentPlan);
+      }
+
+      if (localPlanHistory.length > 0 && !readJson<WeeklyPlan[]>(scopedPlanHistoryStorageKey)) {
+        writeJson(scopedPlanHistoryStorageKey, localPlanHistory);
+      }
+
+      if (
+        Object.keys(localShoppingChecks).length > 0 &&
+        !readJson<Record<string, boolean>>(scopedShoppingChecksStorageKey)
+      ) {
+        writeJson(scopedShoppingChecksStorageKey, localShoppingChecks);
+      }
+
+      setProfile(localProfile);
+      setCurrentPlan(localCurrentPlan);
+      setPlanHistory(localPlanHistory);
+      setShoppingChecks(localShoppingChecks);
+      setLastCloudInstallationId(null);
+      setError(null);
+      setReady(true);
+
+      if (!isCloudSyncEnabled()) {
+        return;
+      }
+
+      setOperation('hydratingRemote', true);
+
+      try {
+        const remoteWorkspace = await loadCloudWorkspace(activeUserId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (remoteWorkspace.hasAnyData) {
+          persistProfileLocally(activeUserId, remoteWorkspace.profile);
+          persistPlanLocally(
+            activeUserId,
+            remoteWorkspace.currentPlan,
+            remoteWorkspace.planHistory,
+          );
+          persistShoppingChecksLocally(activeUserId, remoteWorkspace.shoppingChecks);
+          setLastCloudInstallationId(remoteWorkspace.lastInstallationId);
+          return;
+        }
+
+        const hasLocalWorkspace =
+          Boolean(localProfile) ||
+          Boolean(localCurrentPlan) ||
+          localPlanHistory.length > 0 ||
+          Object.keys(localShoppingChecks).length > 0;
+
+        if (hasLocalWorkspace) {
+          await pushLocalWorkspaceToCloud(activeUserId, {
+            profile: localProfile,
+            currentPlan: localCurrentPlan,
+            planHistory: localPlanHistory,
+            shoppingChecks: localShoppingChecks,
+            installationId: storedInstallationId,
+          });
+          setLastCloudInstallationId(storedInstallationId);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          handleSyncFailure(
+            'Cloud sync is temporarily unavailable. Local data is still available on this device.',
+            nextError,
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setOperation('hydratingRemote', false);
+        }
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUserId, authReady]);
+
   const saveProfile = async (nextProfile: UserProfile) => {
     if (!activeUserId) {
       setError('Sign in to save a profile on this device.');
@@ -285,13 +413,50 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      writeJson(scopedDataKey(profileKey, activeUserId), nextProfile);
-      setProfile(nextProfile);
+      persistProfileLocally(activeUserId, nextProfile);
+
+      if (cloudSyncEnabled) {
+        setOperation('syncingProfile', true);
+
+        try {
+          await upsertCloudProfile(activeUserId, nextProfile);
+        } catch (nextError) {
+          handleSyncFailure(
+            'Profile was saved locally, but cloud sync could not update the account.',
+            nextError,
+          );
+        } finally {
+          setOperation('syncingProfile', false);
+        }
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to save profile');
       throw nextError;
     } finally {
       setOperation('savingProfile', false);
+    }
+  };
+
+  const syncPlansAfterLocalChange = async (
+    userId: string,
+    nextPlan: WeeklyPlan | null,
+    nextHistory: WeeklyPlan[],
+  ) => {
+    if (!cloudSyncEnabled) {
+      return;
+    }
+
+    setOperation('syncingPlan', true);
+
+    try {
+      await syncCloudPlans(userId, nextPlan, nextHistory);
+    } catch (nextError) {
+      handleSyncFailure(
+        'The plan was updated locally, but cloud sync could not update the account history.',
+        nextError,
+      );
+    } finally {
+      setOperation('syncingPlan', false);
     }
   };
 
@@ -315,10 +480,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       const plan = await generatePlan(apiBaseUrl, effectiveProfile, installationId);
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson(scopedDataKey(currentPlanKey, activeUserId), plan);
-      writeJson(scopedDataKey(planHistoryKey, activeUserId), nextHistory);
-      setCurrentPlan(plan);
-      setPlanHistory(nextHistory);
+      persistPlanLocally(activeUserId, plan, nextHistory);
+      await syncPlansAfterLocalChange(activeUserId, plan, nextHistory);
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -357,10 +520,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       );
       const nextHistory = dedupeHistory(planHistory, plan);
 
-      writeJson(scopedDataKey(currentPlanKey, activeUserId), plan);
-      writeJson(scopedDataKey(planHistoryKey, activeUserId), nextHistory);
-      setCurrentPlan(plan);
-      setPlanHistory(nextHistory);
+      persistPlanLocally(activeUserId, plan, nextHistory);
+      await syncPlansAfterLocalChange(activeUserId, plan, nextHistory);
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -399,15 +560,14 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         ...currentPlan,
         validation,
       };
+      const nextHistory = planHistory.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan));
 
-      writeJson(scopedDataKey(currentPlanKey, activeUserId), nextPlan);
-      setCurrentPlan(nextPlan);
+      persistPlanLocally(activeUserId, nextPlan, nextHistory);
+      await syncPlansAfterLocalChange(activeUserId, nextPlan, nextHistory);
       return validation;
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : 'Failed to validate the current plan.',
+        nextError instanceof Error ? nextError.message : 'Failed to validate the current plan.',
       );
       throw nextError;
     } finally {
@@ -491,28 +651,35 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       });
       const bundle = exportBundleV1Schema.parse(JSON.parse(fileContent));
       const nextSettings = safeParseSettings(readJson<AppSettings>(settingsKey));
-      const scopedProfileKey = scopedDataKey(profileKey, activeUserId);
-      const scopedCurrentPlanKey = scopedDataKey(currentPlanKey, activeUserId);
-      const scopedPlanHistoryKey = scopedDataKey(planHistoryKey, activeUserId);
 
-      if (bundle.profile) {
-        writeJson(scopedProfileKey, bundle.profile);
-      } else {
-        removeKey(scopedProfileKey);
-      }
-
-      if (bundle.currentPlan) {
-        writeJson(scopedCurrentPlanKey, bundle.currentPlan);
-      } else {
-        removeKey(scopedCurrentPlanKey);
-      }
-
-      writeJson(scopedPlanHistoryKey, bundle.planHistory);
-      writeJson(settingsKey, nextSettings);
-      setProfile(bundle.profile);
-      setCurrentPlan(bundle.currentPlan);
-      setPlanHistory(bundle.planHistory);
+      persistProfileLocally(activeUserId, bundle.profile);
+      persistPlanLocally(activeUserId, bundle.currentPlan, bundle.planHistory);
       setApiBaseUrl(nextSettings.apiBaseUrl);
+      writeJson(settingsKey, nextSettings);
+
+      if (cloudSyncEnabled) {
+        setOperation('syncingProfile', true);
+        setOperation('syncingPlan', true);
+
+        try {
+          await pushLocalWorkspaceToCloud(activeUserId, {
+            profile: bundle.profile,
+            currentPlan: bundle.currentPlan,
+            planHistory: bundle.planHistory,
+            shoppingChecks,
+            installationId,
+          });
+          setLastCloudInstallationId(installationId);
+        } catch (nextError) {
+          handleSyncFailure(
+            'Backup was imported locally, but cloud sync could not update the account.',
+            nextError,
+          );
+        } finally {
+          setOperation('syncingProfile', false);
+          setOperation('syncingPlan', false);
+        }
+      }
 
       return true;
     } catch (nextError) {
@@ -527,12 +694,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const resetAllData = async () => {
     setOperation('resetting', true);
+
     try {
       if (activeUserId) {
-        removeKey(scopedDataKey(profileKey, activeUserId));
-        removeKey(scopedDataKey(currentPlanKey, activeUserId));
-        removeKey(scopedDataKey(planHistoryKey, activeUserId));
-        removeKey(scopedDataKey(shoppingChecksKey, activeUserId));
+        persistProfileLocally(activeUserId, null);
+        persistPlanLocally(activeUserId, null, []);
+        persistShoppingChecksLocally(activeUserId, {});
       }
 
       removeKey(profileKey);
@@ -552,7 +719,27 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setCurrentPlan(null);
       setPlanHistory([]);
       setShoppingChecks({});
+      setLastCloudInstallationId(null);
       setError(null);
+
+      if (activeUserId && cloudSyncEnabled) {
+        setOperation('syncingProfile', true);
+        setOperation('syncingPlan', true);
+        setOperation('syncingShopping', true);
+
+        try {
+          await deleteCloudWorkspace(activeUserId);
+        } catch (nextError) {
+          handleSyncFailure(
+            'Local planner data was reset, but cloud data could not be cleared for this account.',
+            nextError,
+          );
+        } finally {
+          setOperation('syncingProfile', false);
+          setOperation('syncingPlan', false);
+          setOperation('syncingShopping', false);
+        }
+      }
     } finally {
       setOperation('resetting', false);
     }
@@ -574,15 +761,32 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
 
     const itemKey = buildShoppingCheckKey(currentPlan.id, ingredientId);
+    const nextState = {
+      ...shoppingChecks,
+      [itemKey]: !shoppingChecks[itemKey],
+    };
 
-    setShoppingChecks((current) => {
-      const nextState = {
-        ...current,
-        [itemKey]: !current[itemKey],
-      };
-      writeJson(scopedDataKey(shoppingChecksKey, activeUserId), nextState);
-      return nextState;
-    });
+    persistShoppingChecksLocally(activeUserId, nextState);
+
+    if (!cloudSyncEnabled) {
+      return;
+    }
+
+    setOperation('syncingShopping', true);
+
+    void saveCloudShoppingChecks(activeUserId, nextState, installationId)
+      .then(() => {
+        setLastCloudInstallationId(installationId);
+      })
+      .catch((nextError) => {
+        handleSyncFailure(
+          'Shopping progress was saved locally, but cloud sync could not update the account.',
+          nextError,
+        );
+      })
+      .finally(() => {
+        setOperation('syncingShopping', false);
+      });
   };
 
   return (
@@ -599,6 +803,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         currentPlan,
         planHistory,
         shoppingChecks,
+        cloudSyncEnabled,
+        lastCloudInstallationId,
         saveProfile,
         generateWeek,
         replanCurrentPlan,

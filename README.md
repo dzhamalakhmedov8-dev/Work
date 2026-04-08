@@ -8,8 +8,9 @@ Mobile-first nutrition planner built with Expo, React Native, TypeScript, and a 
 - generates a seven-day meal plan with calories, macros, gram-based ingredients, and recipe steps
 - supports meal, day, and week replanning
 - builds a consolidated shopping list
-- stores profile and plans locally
-- supports Supabase Auth with email and password
+- keeps a fast local cache for profile, plans, and shopping progress
+- supports Supabase Auth with email/password, Google, and Apple sign-in
+- syncs one account-scoped nutrition workspace through Supabase database tables
 - supports JSON backup export and import
 
 ## Workspace layout
@@ -57,8 +58,11 @@ npm run supabase:db:push
 Notes:
 
 - the mobile app reads the public Supabase values through Expo config
-- Supabase Auth now uses the same public project URL and anon key for email/password login
-- Google and Apple social sign-in now use the same Supabase Auth project through OAuth redirects
+- Supabase Auth now uses the same public project URL and anon key for:
+  - email/password sign-up and sign-in
+  - Google OAuth
+  - Apple OAuth
+- the mobile app now syncs profile, current plan, plan history, and shopping checks into user-scoped public tables with RLS
 - the API uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to upsert planner snapshots and event logs
 - the planner API can call an OpenAI-compatible chat endpoint for weekly template selection when `NUTRITION_ENABLE_LLM=1`
 - the deterministic planner remains the source of truth for calories, grams, shopping lists, validation, and fallback recovery
@@ -74,9 +78,16 @@ Notes:
   - `OPENAI_MODEL`
   - `OPENAI_BASE_URL`
 - production health now reports both Supabase and LLM runtime status at `/api/health`
+- after adding the new user-workspace migration, the mobile client writes to:
+  - `public.user_profiles`
+  - `public.user_plans`
+  - `public.user_sync_state`
 - to use Google and Apple sign-in in a real build, also enable both providers in Supabase Auth and add redirect URLs that match this app:
-  - `nutrition-planner://**`
-  - `https://nutrition-planner-mobile.vercel.app/**`
+  - `nutrition-planner://auth`
+  - `https://nutrition-planner-mobile.vercel.app/auth`
+  - `http://localhost:8081/auth`
+- in Google Cloud Console and Apple Developer, the OAuth callback URL must be:
+  - `https://rbsamgvfepzzakhlqdkj.supabase.co/auth/v1/callback`
 
 Example Vercel commands on Windows:
 
@@ -97,6 +108,8 @@ npm run typecheck
 ## Notes
 
 - v1 is local-first and single-profile
-- auth is now account-based, but planner state still stays device-local for fast reads
+- auth is account-based and planner state now uses a hybrid model:
+  - local cache for fast reads
+  - Supabase database as the shared account workspace
 - the product is positioned as a lifestyle and fitness tool, not a medical app
 - the web build uses browser storage, while native targets use SQLite

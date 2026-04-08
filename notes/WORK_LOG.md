@@ -250,3 +250,21 @@
   - native uses Expo auth-session plus deep-link recovery back into the app
 - Added the Expo web-browser plugin and `expo-auth-session` dependency for the OAuth flow.
 - Updated the README with the required Supabase redirect URLs for social sign-in.
+- Added account-scoped Supabase database sync for the mobile app:
+  - new migration for `user_profiles`, `user_plans`, and `user_sync_state`
+  - RLS based on `auth.uid()`
+  - mobile-side cloud sync service for profile, plan history, and shopping checks
+  - app-store bootstrap now hydrates from cloud, auto-migrates local data when the cloud is empty, and keeps local cache as the fast read layer
+  - sync failures keep local data and surface an error/toast instead of discarding the user action
+- Updated the mobile UI to reflect synced account state:
+  - auth bootstrap waits for remote hydration when needed
+  - profile/settings now show cloud-sync status
+  - reset wording now reflects both local and remote workspace clearing
+- Verified after the DB-backed registration sync refactor:
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run vercel-build`
+- Retried `supabase db push` for the new migration:
+  - fixed a local `.env` BOM issue first
+  - the hosted push still fails from this environment on TLS/direct-Postgres connection to `db.rbsamgvfepzzakhlqdkj.supabase.co`
+  - result: repo migration is ready, but the hosted table creation still requires a manual SQL apply in Supabase Dashboard unless remote DB connectivity changes
