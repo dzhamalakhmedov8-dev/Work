@@ -1,0 +1,6 @@
+.vercel
+.env.local
+playwright-report
+test-results
+node_modules
+supabase/.temp

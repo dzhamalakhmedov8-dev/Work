@@ -1,0 +1,21 @@
+{
+  "name": "cosmo-check",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:env": "node ./scripts/check-env.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "smoke:prod": "node ./scripts/smoke-prod.mjs",
+    "smoke:photo-api": "node ./scripts/photo-api-smoke.mjs",
+    "verify": "npm run check:env && npm run typecheck && npm run test:e2e && npm run smoke:prod && npm run smoke:photo-api"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "typescript": "^5.9.3"
+  }
+}

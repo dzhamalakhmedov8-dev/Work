@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CosmoCheck — мобильный сканнер косметики: помогает понять, какие средства можно сочетать вместе, а какие лучше разделить по времени.">
+  <meta name="theme-color" content="#2c2a35">
+  <title>CosmoCheck — Сканнер сочетания ухода</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="page-backdrop" aria-hidden="true"></div>
+  <div class="site-shell">
+    <header class="site-header">
+      <div class="container header-row">
+        <a class="brand" href="#top" aria-label="CosmoCheck">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-copy">
+            <strong>CosmoCheck</strong>
+            <span>сканнер сочетания ухода</span>
+          </span>
+        </a>
+        <div class="header-actions">
+          <button class="button button-secondary button-compact" id="headerAuthBtn" type="button" hidden>
+            Войти
+          </button>
+          <div class="account-summary" id="accountSummary" hidden>
+            <div class="account-avatar" id="accountAvatar" aria-hidden="true">C</div>
+            <div class="account-copy">
+              <strong id="accountName">CosmoCheck</strong>
+              <span id="accountEmail">hello@cosmocheck.app</span>
+            </div>
+            <button class="button button-ghost button-compact" id="authSignOutBtn" type="button">
+              Выйти
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="container">
+          <div class="hero-copy reveal">
+            <div class="hero-breadcrumb" aria-label="Навигация">
+              <span class="breadcrumb-brand">CosmoCheck</span>
+              <span class="breadcrumb-separator">/</span>
+              <span class="breadcrumb-mode" id="breadcrumbMode">по фото</span>
+            </div>
+
+            <div class="hero-grid">
+              <div class="hero-intro">
+                <p class="eyebrow">Сначала фото</p>
+                <h1>Добавьте два фото и узнайте, можно ли сочетать эту пару.</h1>
+                <p class="hero-text">
+                  Один короткий вывод по паре средств. Если удобнее, можно сразу перейти к ручному вводу.
+                </p>
+                <div class="hero-actions">
+                  <button class="button button-primary" id="heroStartBtn" type="button">
+                    Загрузить фото
+                  </button>
+                </div>
+                <div class="trust-strip" aria-label="Что вы получите">
+                  <span>Фото как основной вход</span>
+                  <span>Короткий вывод по паре</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="analyzer" id="analyzerSection">
+        <div class="container">
+          <section class="analyzer-card reveal" aria-labelledby="analyzerTitle">
+            <div class="analyzer-lead">
+              <p class="eyebrow">Основной сценарий</p>
+              <h2 id="analyzerTitle">Загрузите два фото.</h2>
+              <p class="analyzer-copy" id="analyzerIntro" hidden></p>
+            </div>
+
+            <div class="mode-switch" id="modeSwitch" hidden>
+              <button class="mode-pill is-selected" id="photoModeBtn" type="button" aria-pressed="true">
+                По фото
+              </button>
+              <button class="mode-pill" id="manualModeBtn" type="button" aria-pressed="false">
+                По составу
+              </button>
+            </div>
+
+            <div class="workspace is-active" id="photoWorkspace">
+              <div class="photo-lead">
+                <p>Лучше всего подходят чёткие фото упаковки или списка ингредиентов.</p>
+              </div>
+
+              <div class="upload-grid">
+                <article class="upload-card" id="uploadCard1">
+                  <input class="visually-hidden" id="uploadInput1" type="file" accept="image/*" capture="environment">
+                  <div class="upload-state upload-placeholder">
+                    <p class="field-kicker">Средство 1</p>
+                    <h3>Добавьте первое фото</h3>
+                    <p>Подойдёт упаковка или список ингредиентов.</p>
+                  </div>
+                  <div class="upload-state upload-preview" aria-live="polite">
+                    <img class="preview-image" alt="">
+                    <div class="preview-copy">
+                      <p class="field-kicker">Средство 1</p>
+                      <strong class="preview-title">Фото добавлено</strong>
+                      <p class="preview-meta">Готово к сравнению.</p>
+                    </div>
+                  </div>
+                  <div class="upload-actions">
+                    <button class="button button-secondary button-compact upload-select" data-product="1" type="button">
+                      Добавить фото
+                    </button>
+                    <button class="button button-ghost button-compact upload-replace" data-product="1" type="button">
+                      Заменить
+                    </button>
+                    <button class="button button-ghost button-compact upload-remove" data-product="1" type="button">
+                      Удалить
+                    </button>
+                  </div>
+                </article>
+
+                <article class="upload-card" id="uploadCard2">
+                  <input class="visually-hidden" id="uploadInput2" type="file" accept="image/*" capture="environment">
+                  <div class="upload-state upload-placeholder">
+                    <p class="field-kicker">Средство 2</p>
+                    <h3>Добавьте второе фото</h3>
+                    <p>Нужна пара средств для сравнения.</p>
+                  </div>
+                  <div class="upload-state upload-preview" aria-live="polite">
+                    <img class="preview-image" alt="">
+                    <div class="preview-copy">
+                      <p class="field-kicker">Средство 2</p>
+                      <strong class="preview-title">Фото добавлено</strong>
+                      <p class="preview-meta">Остался один шаг.</p>
+                    </div>
+                  </div>
+                  <div class="upload-actions">
+                    <button class="button button-secondary button-compact upload-select" data-product="2" type="button">
+                      Добавить фото
+                    </button>
+                    <button class="button button-ghost button-compact upload-replace" data-product="2" type="button">
+                      Заменить
+                    </button>
+                    <button class="button button-ghost button-compact upload-remove" data-product="2" type="button">
+                      Удалить
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="workspace" id="manualWorkspace">
+              <div class="manual-grid">
+                <article class="manual-card">
+                  <p class="field-kicker">Средство 1</p>
+                  <label for="manualName1">Название</label>
+                  <input id="manualName1" type="text" placeholder="Например, сыворотка с ретинолом">
+                  <label for="manualIngredients1">Состав</label>
+                  <textarea
+                    id="manualIngredients1"
+                    rows="8"
+                    placeholder="Например: Aqua, Retinol, Niacinamide, Tocopherol..."
+                  ></textarea>
+                </article>
+
+                <article class="manual-card">
+                  <p class="field-kicker">Средство 2</p>
+                  <label for="manualName2">Название</label>
+                  <input id="manualName2" type="text" placeholder="Например, успокаивающий крем">
+                  <label for="manualIngredients2">Состав</label>
+                  <textarea
+                    id="manualIngredients2"
+                    rows="8"
+                    placeholder="Например: Aqua, Ceramide NP, Panthenol, Beta-Glucan..."
+                  ></textarea>
+                </article>
+              </div>
+            </div>
+
+            <div class="action-panel">
+              <div class="inline-status inline-status-info" id="actionStatus" role="status">
+                <div>
+                  <strong id="actionStatusTitle">Добавьте два фото.</strong>
+                  <p id="actionStatusCopy">Тогда можно будет сравнить эту пару.</p>
+                </div>
+              </div>
+              <button class="button button-primary button-large" id="analyzeBtn" type="button">
+                Получить рекомендацию
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="secondary-sections">
+        <div class="container secondary-stack">
+          <section class="panel-soft reveal" aria-labelledby="demoTitle">
+            <div class="section-row">
+              <div>
+                <p class="eyebrow">Пример результата</p>
+                <h3 id="demoTitle">Как выглядит результат</h3>
+              </div>
+            </div>
+            <div class="demo-grid" id="demoGrid"></div>
+          </section>
+
+          <section class="panel-soft reveal" id="historySection" aria-labelledby="historyTitle" hidden>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow">Сохранённые рекомендации</p>
+                <h3 id="historyTitle">Сохранённые разборы</h3>
+              </div>
+            </div>
+            <div class="history-toolbar" id="historyToolbar" hidden>
+              <p class="history-note" id="historyNote">Последние разборы в вашем аккаунте.</p>
+              <button class="button-link history-clear-button" id="clearHistoryBtn" type="button" hidden>
+                Очистить историю аккаунта
+              </button>
+            </div>
+            <div class="history-grid" id="historyGrid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="results" id="resultsSection" hidden>
+        <div class="container">
+          <div class="section-heading section-centered reveal">
+            <p class="eyebrow">Ваша рекомендация</p>
+            <h2>Как лучше сочетать эту пару</h2>
+            <p>Сначала главное решение, потом короткое объяснение и только те детали, которые действительно помогают.</p>
+          </div>
+
+          <article class="verdict-card reveal" id="verdictCard">
+            <div class="verdict-layout">
+              <div class="verdict-meter" aria-hidden="true">
+                <div class="verdict-ring">
+                  <span class="verdict-ring-value">85%</span>
+                </div>
+              </div>
+              <div class="verdict-copy">
+                <p class="verdict-kicker" id="verdictKicker">Можно ли сочетать</p>
+                <h3 class="verdict-title" id="verdictTitle">—</h3>
+                <p class="verdict-description" id="verdictDescription">—</p>
+                <div class="verdict-badges">
+                  <span>Рекомендация по рутине</span>
+                  <span>Что влияет на совместимость</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div class="results-grid">
+            <article class="result-panel result-panel-primary reveal">
+              <div class="result-panel-header">
+                <p class="eyebrow">Как лучше использовать</p>
+                <h3 id="routineTitle">—</h3>
+              </div>
+              <p id="routineCopy">—</p>
+            </article>
+
+            <article class="result-panel result-panel-secondary reveal">
+              <div class="result-panel-header">
+                <p class="eyebrow">Почему</p>
+                <h3>Что повлияло на вывод</h3>
+              </div>
+              <p id="whyCopy">—</p>
+            </article>
+          </div>
+
+          <div class="products-grid" id="productsSummary"></div>
+
+          <section class="analysis-stack reveal" aria-labelledby="interactionsTitle">
+            <div class="section-row analysis-header">
+              <div>
+                <p class="eyebrow">Подробности по активам</p>
+                <h3 id="interactionsTitle">Что важно знать об этой паре</h3>
+              </div>
+            </div>
+            <div id="interactionsContainer"></div>
+          </section>
+
+          <section class="result-panel reveal" aria-labelledby="sourcesTitle">
+            <div class="result-panel-header">
+              <p class="eyebrow">Экспертная опора</p>
+              <h3 id="sourcesTitle">На чем основана рекомендация</h3>
+            </div>
+            <div class="sources-list" id="sourcesList"></div>
+          </section>
+
+          <div class="new-scan-row reveal">
+            <button class="button button-secondary" id="newScanBtn" type="button">
+              Проверить другую пару
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-row">
+        <p>CosmoCheck помогает ориентироваться в сочетании ухода и не заменяет консультацию специалиста.</p>
+      </div>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop" id="authModal" hidden>
+    <section class="auth-modal" aria-labelledby="authModalTitle" aria-modal="true" role="dialog">
+      <button class="modal-close" id="authCloseBtn" type="button" aria-label="Закрыть окно входа">
+        ×
+      </button>
+      <div class="auth-modal-shell">
+        <div class="auth-modal-head">
+          <p class="eyebrow">Аккаунт CosmoCheck</p>
+          <h2 id="authModalTitle">Войдите в CosmoCheck</h2>
+          <p id="authModalCopy">
+            Так пары средств и готовые рекомендации будут рядом, когда вы захотите к ним вернуться.
+          </p>
+        </div>
+
+        <div class="auth-card">
+          <button class="button button-primary" id="authGoogleBtn" type="button">
+            Продолжить через Google
+          </button>
+
+          <div class="auth-divider">
+            <span>или по электронной почте</span>
+          </div>
+
+          <label for="authName">Имя</label>
+          <input id="authName" type="text" placeholder="Как к вам обращаться">
+
+          <label for="authEmail">Email</label>
+          <input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+
+          <label for="authPassword">Пароль</label>
+          <input id="authPassword" type="password" autocomplete="current-password" placeholder="Не менее 6 символов">
+
+          <div class="auth-actions">
+            <button class="button button-primary" id="authRegisterBtn" type="button">
+              Создать аккаунт
+            </button>
+            <button class="button button-secondary" id="authLoginBtn" type="button">
+              Войти
+            </button>
+          </div>
+
+          <div class="inline-status inline-status-info" id="authStatus" role="status">
+            <div>
+              <strong id="authStatusTitle">Сохраните свои рекомендации</strong>
+              <p id="authStatusCopy">Войдите удобным способом, чтобы любимые сочетания оставались рядом.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="progress-backdrop" id="progressOverlay" hidden>
+    <section class="progress-panel" aria-labelledby="progressTitle" aria-live="polite">
+      <p class="eyebrow">Собираем рекомендацию</p>
+      <h2 id="progressTitle">Это займет всего пару секунд</h2>
+      <p class="progress-copy" id="progressCopy">Собираем всё важное о вашей паре средств.</p>
+      <ol class="progress-steps">
+        <li class="progress-step" data-step="ingredients">
+          <strong>Смотрим составы</strong>
+          <span>Собираем всё важное о каждом средстве.</span>
+        </li>
+        <li class="progress-step" data-step="actives">
+          <strong>Выделяем важные активы</strong>
+          <span>Понимаем, что может повлиять на комфорт кожи.</span>
+        </li>
+        <li class="progress-step" data-step="compatibility">
+          <strong>Готовим рекомендацию</strong>
+          <span>Показываем спокойный и понятный следующий шаг.</span>
+        </li>
+      </ol>
+      <div class="progress-actions">
+        <button class="button button-ghost" id="cancelAnalysisBtn" type="button">
+          Остановить
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="js/ui.js"></script>
+  <script src="js/ingredients.js"></script>
+  <script src="js/compatibility.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
