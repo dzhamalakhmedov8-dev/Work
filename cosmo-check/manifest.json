@@ -1,9 +1,0 @@
-{
-  "name": "CosmoCheck",
-  "short_name": "CosmoCheck",
-  "description": "Сканер совместимости косметики с фокусом на понятный clinical UX.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#f5f4ee",
-  "theme_color": "#f5f4ee"
-}
